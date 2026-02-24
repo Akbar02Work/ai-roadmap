@@ -1,0 +1,272 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+}
+
+// ============================================================
+// PROFILES — linked to Supabase auth.users
+// Email lives in auth.users, NOT duplicated here.
+// Trigger on auth.users insert creates profile automatically.
+// ============================================================
+model Profile {
+  id               String   @id @db.Uuid
+  displayName      String?  @map("display_name")
+  avatarUrl        String?  @map("avatar_url")
+  locale           String   @default("en")
+  stripeCustomerId String?  @map("stripe_customer_id")
+  coins            Int      @default(0)
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at")
+
+  goals         Goal[]
+  attempts      Attempt[]
+  mastery       Mastery[]
+  aiLogs        AiLog[]
+  subscriptions Subscription[]
+  usage         Usage[]
+  templates     Template[]
+  events        Event[]
+
+  @@map("profiles")
+}
+
+// ============================================================
+// GOALS
+// ============================================================
+model Goal {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  title             String
+  category          String   // 'language' | 'programming' | 'math' | ...
+  targetDescription String?  @map("target_description")
+  targetDate        DateTime? @map("target_date") @db.Date
+  motivation        String?
+  constraints       Json     @default("{}")
+  diagnosis         Json     @default("{}")
+  cefrLevel         String?  @map("cefr_level") // 'A0'|'A1'|'A2'|'B1'|'B2'|'C1'|'C2'
+  status            String   @default("active") // 'active' | 'completed' | 'paused' | 'archived'
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  user              Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roadmaps          Roadmap[]
+  onboardingSessions OnboardingSession[]
+
+  @@map("goals")
+}
+
+// ============================================================
+// ROADMAPS
+// ============================================================
+model Roadmap {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  goalId             String   @map("goal_id") @db.Uuid
+  version            Int      @default(1)
+  status             String   @default("active") // 'active' | 'superseded'
+  generatedBy        String?  @map("generated_by")
+  roadmapMeta        Json     @default("{}") @map("roadmap_meta")
+  regenerationReason String?  @map("regeneration_reason")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  goal      Goal          @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  nodes     RoadmapNode[]
+  templates Template[]
+
+  @@map("roadmaps")
+}
+
+// ============================================================
+// ROADMAP NODES
+// NOTE: status is stored per-node (ok for MVP since roadmap is per-user).
+// v2 tech debt: extract to user_node_progress table for template reuse.
+// ============================================================
+model RoadmapNode {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  roadmapId     String   @map("roadmap_id") @db.Uuid
+  sortOrder     Int      @map("sort_order")
+  title         String
+  description   String?
+  nodeType      String   @default("lesson") @map("node_type") // 'lesson' | 'quiz' | 'practice' | 'review'
+  content       Json     @default("{}") // lesson content, exercises
+  estMinutes    Int      @default(15) @map("est_minutes")
+  passRules     Json     @default("{}") @map("pass_rules") // {min_score: 0.7, require_artifact: false}
+  prerequisites String[] @db.Uuid // node ids that must be completed first
+  status        String   @default("locked") // 'locked' | 'active' | 'completed' | 'skipped'
+  skills        String[] // skills this node develops
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  roadmap  Roadmap   @relation(fields: [roadmapId], references: [id], onDelete: Cascade)
+  attempts Attempt[]
+
+  @@map("roadmap_nodes")
+}
+
+// ============================================================
+// ATTEMPTS (quiz / checkin results)
+// Quality audit fields saved for future "AI checks AI" feature
+// ============================================================
+model Attempt {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  nodeId       String   @map("node_id") @db.Uuid
+  attemptType  String   @map("attempt_type") // 'quiz' | 'checkin' | 'artifact'
+  score        Float?
+  passed       Boolean  @default(false)
+  userReport   String?  @map("user_report")
+  artifactUrl  String?  @map("artifact_url")
+  llmFeedback  Json     @default("{}") @map("llm_feedback")
+  llmRubric    Json     @default("{}") @map("llm_rubric")    // rubric used (audit)
+  llmRationale String?  @map("llm_rationale") // why AI passed/failed (audit)
+  llmRawInput  String?  @map("llm_raw_input") // raw prompt sent (PII-redacted, audit)
+  durationSec  Int?     @map("duration_sec")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user Profile     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  node RoadmapNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  @@map("attempts")
+}
+
+// ============================================================
+// MASTERY
+// ============================================================
+model Mastery {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  skill        String
+  masteryScore Float    @default(0.0) @map("mastery_score")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
+
+  user Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, skill])
+  @@map("mastery")
+}
+
+// ============================================================
+// AI LOGS
+// ============================================================
+model AiLog {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String?  @map("user_id") @db.Uuid
+  taskType     String   @map("task_type") // 'roadmap_gen' | 'quiz_gen' | 'grading' | 'onboarding'
+  model        String   // 'gpt-5-mini' | 'gpt-5.2' | 'claude-sonnet-4.6'
+  promptVersion String? @map("prompt_version") // e.g. 'onboarding.v1'
+  inputTokens  Int?     @map("input_tokens")
+  outputTokens Int?     @map("output_tokens")
+  latencyMs    Int?     @map("latency_ms")
+  status       String   @default("success") // 'success' | 'error' | 'retry'
+  errorMessage String?  @map("error_message")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user Profile? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("ai_logs")
+}
+
+// ============================================================
+// SUBSCRIPTIONS
+// ============================================================
+model Subscription {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId             String    @map("user_id") @db.Uuid
+  plan               String    @default("free") // 'free' | 'starter' | 'pro' | 'unlimited'
+  stripeSubId        String?   @map("stripe_sub_id")
+  status             String    @default("active") // 'active' | 'cancelled' | 'past_due'
+  currentPeriodStart DateTime? @map("current_period_start")
+  currentPeriodEnd   DateTime? @map("current_period_end")
+  createdAt          DateTime  @default(now()) @map("created_at")
+
+  user Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+// ============================================================
+// USAGE LIMITS
+// ============================================================
+model Usage {
+  id               String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId           String @map("user_id") @db.Uuid
+  date             DateTime @default(now()) @db.Date
+  roadmapsGenerated Int    @default(0) @map("roadmaps_generated")
+  aiMessages       Int    @default(0) @map("ai_messages")
+  tokensUsed       Int    @default(0) @map("tokens_used")
+
+  user Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@map("usage")
+}
+
+// ============================================================
+// TEMPLATE GALLERY (v2 — schema only, not used in MVP)
+// ============================================================
+model Template {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  authorId    String?  @map("author_id") @db.Uuid
+  roadmapId   String?  @map("roadmap_id") @db.Uuid
+  title       String
+  description String?
+  category    String
+  isPublic    Boolean  @default(false) @map("is_public")
+  likesCount  Int      @default(0) @map("likes_count")
+  usesCount   Int      @default(0) @map("uses_count")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  author  Profile? @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  roadmap Roadmap? @relation(fields: [roadmapId], references: [id], onDelete: SetNull)
+
+  @@map("templates")
+}
+
+// ============================================================
+// ONBOARDING SESSIONS
+// ============================================================
+model OnboardingSession {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  goalId    String   @map("goal_id") @db.Uuid
+  status    String   @default("in_progress") // 'in_progress' | 'completed' | 'abandoned'
+  createdAt DateTime @default(now()) @map("created_at")
+
+  goal     Goal          @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  messages ChatMessage[]
+
+  @@map("onboarding_sessions")
+}
+
+// ============================================================
+// CHAT MESSAGES (onboarding persistence)
+// ============================================================
+model ChatMessage {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sessionId String   @map("session_id") @db.Uuid
+  role      String   // 'user' | 'assistant' | 'system'
+  content   String
+  metadata  Json     @default("{}") // extracted structured data, if any
+  createdAt DateTime @default(now()) @map("created_at")
+
+  session OnboardingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("chat_messages")
+}
+
+// ============================================================
+// EVENTS (analytics)
+// ============================================================
+model Event {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String?  @map("user_id") @db.Uuid
+  eventType String   @map("event_type") // 'onboarding_completed' | 'node_started' | ...
+  payload   Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user Profile? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("events")
+}

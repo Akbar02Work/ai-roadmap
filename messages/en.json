@@ -1,0 +1,88 @@
+{
+    "nav": {
+        "home": "Home",
+        "dashboard": "Dashboard",
+        "settings": "Settings",
+        "billing": "Billing",
+        "login": "Log In",
+        "logout": "Log Out",
+        "signup": "Sign Up"
+    },
+    "landing": {
+        "hero": {
+            "title": "Your AI-Powered Learning Roadmap",
+            "subtitle": "Set a goal. Get a personalized plan. Track your progress. Adapt as you learn.",
+            "cta": "Get Started Free"
+        },
+        "features": {
+            "title": "How It Works",
+            "step1": {
+                "title": "Set Your Goal",
+                "description": "Tell our AI what you want to learn. Korean, English, or any language — we'll create your path."
+            },
+            "step2": {
+                "title": "Get Your Roadmap",
+                "description": "AI generates a step-by-step roadmap tailored to your level, schedule, and learning style."
+            },
+            "step3": {
+                "title": "Learn & Adapt",
+                "description": "Complete lessons, take quizzes, and watch your plan adjust to your progress in real time."
+            }
+        },
+        "pricing": {
+            "title": "Simple Pricing",
+            "free": "Free",
+            "starter": "Starter",
+            "pro": "Pro",
+            "unlimited": "Unlimited",
+            "perMonth": "/month",
+            "currentPlan": "Current Plan",
+            "upgrade": "Upgrade"
+        }
+    },
+    "onboarding": {
+        "title": "Let's build your roadmap",
+        "placeholder": "Type your message...",
+        "send": "Send",
+        "generating": "Generating your roadmap..."
+    },
+    "dashboard": {
+        "title": "Dashboard",
+        "activeGoals": "Active Goals",
+        "streak": "Day Streak",
+        "noGoals": "No active goals yet. Start by creating one!",
+        "createGoal": "Create New Goal"
+    },
+    "roadmap": {
+        "title": "Your Roadmap",
+        "progress": "Progress",
+        "completed": "Completed",
+        "locked": "Locked",
+        "active": "Active",
+        "startLesson": "Start Lesson"
+    },
+    "quiz": {
+        "title": "Quiz",
+        "submit": "Submit Answer",
+        "next": "Next Question",
+        "score": "Your Score",
+        "passed": "Passed!",
+        "failed": "Try Again",
+        "dispute": "Dispute Result"
+    },
+    "settings": {
+        "title": "Settings",
+        "language": "Language",
+        "profile": "Profile",
+        "subscription": "Subscription"
+    },
+    "common": {
+        "loading": "Loading...",
+        "error": "Something went wrong",
+        "retry": "Try Again",
+        "save": "Save",
+        "cancel": "Cancel",
+        "back": "Back",
+        "continue": "Continue"
+    }
+}
