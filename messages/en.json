@@ -44,7 +44,21 @@
         "title": "Let's build your roadmap",
         "placeholder": "Type your message...",
         "send": "Send",
-        "generating": "Generating your roadmap..."
+        "generating": "Generating your roadmap...",
+        "welcome": "Hi! I'll help you create a personalized learning roadmap. What would you like to learn?",
+        "startDiagnostic": "Start Level Assessment",
+        "submitAnswers": "Submit Answers",
+        "diagnosticResult": "Your level: {level}",
+        "phase4Placeholder": "Your roadmap will be generated in Phase 4. Stay tuned!",
+        "errorSending": "Failed to send message. Please try again.",
+        "sessionExpired": "Session expired. Please start a new session.",
+        "answerPlaceholder": "Type your answer...",
+        "questionOf": "Question {current} of {total}"
+    },
+    "auth": {
+        "emailPlaceholder": "Email",
+        "passwordPlaceholder": "Password (min 6 chars)",
+        "checkEmail": "Check your email for a confirmation link!"
     },
     "dashboard": {
         "title": "Dashboard",
