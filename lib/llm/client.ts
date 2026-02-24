@@ -150,7 +150,14 @@ async function callLLMInternal<T>(
     // 1. Rate limiting (uses userId or "anon")
     const rlResult = await checkRateLimit(input.userId ?? "anon");
     if (!rlResult.allowed) {
-        throw new LLMError("Rate limit exceeded. Please slow down.", 429, input.task);
+        throw new LLMError(
+            rlResult.reason ??
+                (rlResult.statusCode === 503
+                    ? "Rate limit backend misconfigured."
+                    : "Rate limit exceeded. Please slow down."),
+            rlResult.statusCode ?? 429,
+            input.task
+        );
     }
 
     // 2. Usage limit check (only for authenticated users)

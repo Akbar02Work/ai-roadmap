@@ -30,9 +30,19 @@ export async function POST(request: NextRequest) {
         "unknown-ip";
     const rl = await checkRateLimit(ip, /* strict */ true);
     if (!rl.allowed) {
+        const status = rl.statusCode ?? 429;
+        if (status === 503) {
+            return NextResponse.json(
+                { error: rl.reason ?? "Rate limit backend misconfigured." },
+                { status: 503 }
+            );
+        }
         return NextResponse.json(
-            { error: "Rate limit exceeded. Try again later.", retryAfterMs: rl.resetMs },
-            { status: 429 }
+            {
+                error: rl.reason ?? "Rate limit exceeded. Try again later.",
+                retryAfterMs: rl.resetMs,
+            },
+            { status }
         );
     }
 
