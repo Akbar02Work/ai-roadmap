@@ -34,3 +34,13 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## RLS Setup (Required Before Production)
+
+Row Level Security policies are versioned in `supabase/migrations/0001_rls.sql`.
+Apply this SQL after the base schema exists:
+
+1. Supabase SQL Editor: paste and run `supabase/migrations/0001_rls.sql`.
+2. Supabase CLI (if configured): `supabase db push` from the project root.
+
+RLS is a mandatory production step. Do not ship endpoints that read/write user data until these policies are applied in the target environment.
