@@ -9,7 +9,7 @@
 import { z } from "zod/v4";
 import { prisma } from "@/lib/db";
 import { callProvider } from "./providers";
-import { checkUsageLimit, incrementUsage } from "./usage";
+import { checkUsageLimit, consumeUsage } from "./usage";
 import { checkRateLimit } from "./rate-limit";
 import type {
     CallLLMInput,
@@ -106,10 +106,18 @@ async function onSuccess(
     input: CallLLMInput,
     raw: RawLLMResponse
 ): Promise<void> {
-    await logToAiLogs(input, raw, "success");
     if (input.userId) {
-        await incrementUsage(input.userId, raw.inputTokens + raw.outputTokens);
+        const consumed = await consumeUsage(
+            input.userId,
+            raw.inputTokens + raw.outputTokens,
+            1
+        );
+        if (!consumed.allowed) {
+            await logToAiLogs(input, raw, "error", consumed.reason ?? "Usage limit exceeded.");
+            throw new LLMError(consumed.reason ?? "Usage limit exceeded.", 403, input.task);
+        }
     }
+    await logToAiLogs(input, raw, "success");
 }
 
 // ---- main function: plain string output ----------------------
@@ -177,6 +185,9 @@ async function callLLMInternal<T>(
             };
         } catch (error) {
             lastError = error instanceof Error ? error : new Error(String(error));
+            if (lastError instanceof LLMError && lastError.httpStatus === 403) {
+                throw lastError;
+            }
             console.error(
                 `[LLM] Primary ${routing.primary.model} attempt ${attempt}/${PRIMARY_RETRIES}:`,
                 lastError.message
@@ -210,6 +221,9 @@ async function callLLMInternal<T>(
         };
     } catch (error) {
         const err = error instanceof Error ? error : new Error(String(error));
+        if (err instanceof LLMError && err.httpStatus === 403) {
+            throw err;
+        }
         await logToAiLogs(input, lastRaw, "error", err.message);
 
         throw new LLMError(

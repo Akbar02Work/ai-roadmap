@@ -12,6 +12,11 @@ interface UsageCheckResult {
     limit?: { aiMessagesPerDay: number; tokensPerDay: number };
 }
 
+export interface UsageConsumeResult {
+    allowed: boolean;
+    reason?: string;
+}
+
 /**
  * Get the user's plan. Falls back to 'free' if no subscription found.
  */
@@ -93,4 +98,50 @@ export async function incrementUsage(
             tokensUsed: { increment: tokensUsed },
         },
     });
+}
+
+/**
+ * Atomically consume usage budget for the current day.
+ * This is the authoritative enforcement path after an LLM call.
+ */
+export async function consumeUsage(
+    userId: string,
+    deltaTokens: number,
+    deltaMessages = 1
+): Promise<UsageConsumeResult> {
+    const plan = await getUserPlan(userId);
+    const limits = PLAN_LIMITS[plan];
+
+    // Unlimited plan still tracks usage, but has no hard cap.
+    if (limits.aiMessagesPerDay === Infinity || limits.tokensPerDay === Infinity) {
+        await incrementUsage(userId, deltaTokens);
+        return { allowed: true };
+    }
+
+    const rows = await prisma.$queryRaw<Array<{ ai_messages: number; tokens_used: number }>>`
+        WITH ensure_row AS (
+            INSERT INTO "usage" ("user_id", "date")
+            VALUES (${userId}::uuid, CURRENT_DATE)
+            ON CONFLICT ("user_id", "date") DO NOTHING
+        )
+        UPDATE "usage"
+        SET
+            "ai_messages" = "ai_messages" + ${deltaMessages},
+            "tokens_used" = "tokens_used" + ${deltaTokens}
+        WHERE
+            "user_id" = ${userId}::uuid
+            AND "date" = CURRENT_DATE
+            AND "ai_messages" + ${deltaMessages} <= ${limits.aiMessagesPerDay}
+            AND "tokens_used" + ${deltaTokens} <= ${limits.tokensPerDay}
+        RETURNING "ai_messages", "tokens_used"
+    `;
+
+    if (rows.length > 0) {
+        return { allowed: true };
+    }
+
+    return {
+        allowed: false,
+        reason: `Daily usage limit exceeded (${plan} plan).`,
+    };
 }
