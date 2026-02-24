@@ -2,6 +2,8 @@
 // LLM Service Layer — Types
 // ============================================================
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 export type LLMTask =
     | "onboarding_chat"
     | "level_assessment"
@@ -11,7 +13,7 @@ export type LLMTask =
     | "artifact_grading"
     | "quality_check";
 
-export type LLMProvider = "openai" | "anthropic";
+export type LLMProvider = "openai" | "anthropic" | "openrouter";
 export type Locale = "en" | "ru";
 
 export interface ModelConfig {
@@ -36,6 +38,13 @@ export interface CallLLMInput {
     userId?: string;
     promptVersion: string;
     messages: LLMMessage[];
+}
+
+export type LLMDatabase = any;
+
+export interface CallLLMContext {
+    userId: string;
+    supabase: SupabaseClient<LLMDatabase>;
 }
 
 export interface CallLLMResult<T = string> {
@@ -76,12 +85,12 @@ export interface RawLLMResponse {
 // ============================================================
 export const MODEL_ROUTING: Record<LLMTask, TaskRouting> = {
     onboarding_chat: {
-        primary: { provider: "openai", model: "gpt-4.1-mini", temperature: 0.7 },
-        fallback: { provider: "anthropic", model: "claude-sonnet-4-20250514", temperature: 0.7 },
+        primary: { provider: "openrouter", model: "__OPENROUTER_MODEL__", temperature: 0.7 },
+        fallback: { provider: "openrouter", model: "__OPENROUTER_MODEL__", temperature: 0.7 },
     },
     level_assessment: {
-        primary: { provider: "openai", model: "gpt-4.1-mini", temperature: 0.3 },
-        fallback: { provider: "anthropic", model: "claude-sonnet-4-20250514", temperature: 0.3 },
+        primary: { provider: "openrouter", model: "__OPENROUTER_MODEL__", temperature: 0.3 },
+        fallback: { provider: "openrouter", model: "__OPENROUTER_MODEL__", temperature: 0.3 },
     },
     roadmap_generation: {
         primary: { provider: "openai", model: "gpt-4.1", temperature: 0.5 },

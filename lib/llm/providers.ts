@@ -96,6 +96,71 @@ export async function callAnthropic(
     };
 }
 
+// ---- OpenRouter -----------------------------------------------
+
+const OPENROUTER_DEFAULT_MODEL = "google/gemini-2.5-flash";
+const OPENROUTER_DEFAULT_REFERER = "https://ai-roadmap.app";
+const OPENROUTER_DEFAULT_TITLE = "AI Roadmap";
+
+let openrouterClient: OpenAI | null = null;
+
+function getOpenRouter(): OpenAI {
+    if (!openrouterClient) {
+        if (!process.env.OPENROUTER_API_KEY) {
+            throw new Error("OPENROUTER_API_KEY is not set");
+        }
+        const referer =
+            process.env.OPENROUTER_REFERER ?? OPENROUTER_DEFAULT_REFERER;
+        const title = process.env.OPENROUTER_TITLE ?? OPENROUTER_DEFAULT_TITLE;
+        openrouterClient = new OpenAI({
+            apiKey: process.env.OPENROUTER_API_KEY,
+            baseURL: "https://openrouter.ai/api/v1",
+            defaultHeaders: {
+                "HTTP-Referer": referer,
+                "X-Title": title,
+            },
+        });
+    }
+    return openrouterClient;
+}
+
+export async function callOpenRouter(
+    config: ModelConfig,
+    messages: LLMMessage[],
+    jsonMode: boolean
+): Promise<RawLLMResponse> {
+    const client = getOpenRouter();
+    const start = Date.now();
+
+    // Resolve model: if placeholder, use env or default
+    const model =
+        config.model === "__OPENROUTER_MODEL__"
+            ? process.env.OPENROUTER_MODEL ?? OPENROUTER_DEFAULT_MODEL
+            : config.model;
+
+    try {
+        const completion = await client.chat.completions.create({
+            model,
+            messages,
+            temperature: config.temperature ?? 0.5,
+            max_tokens: config.maxTokens ?? 4096,
+            ...(jsonMode ? { response_format: { type: "json_object" } } : {}),
+        });
+
+        return {
+            content: completion.choices[0]?.message?.content ?? "",
+            model,
+            provider: "openrouter",
+            inputTokens: completion.usage?.prompt_tokens ?? 0,
+            outputTokens: completion.usage?.completion_tokens ?? 0,
+            latencyMs: Date.now() - start,
+        };
+    } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        throw new Error(`OpenRouter (${model}) failed: ${msg}`);
+    }
+}
+
 // ---- Dispatcher ----------------------------------------------
 
 export async function callProvider(
@@ -108,6 +173,8 @@ export async function callProvider(
             return callOpenAI(config, messages, jsonMode);
         case "anthropic":
             return callAnthropic(config, messages);
+        case "openrouter":
+            return callOpenRouter(config, messages, jsonMode);
         default:
             throw new Error(`Unknown provider: ${config.provider}`);
     }
