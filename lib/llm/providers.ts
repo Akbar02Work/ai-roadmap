@@ -99,6 +99,8 @@ export async function callAnthropic(
 // ---- OpenRouter -----------------------------------------------
 
 const OPENROUTER_DEFAULT_MODEL = "google/gemini-2.5-flash";
+const OPENROUTER_DEFAULT_REFERER = "https://ai-roadmap.app";
+const OPENROUTER_DEFAULT_TITLE = "AI Roadmap";
 
 let openrouterClient: OpenAI | null = null;
 
@@ -107,12 +109,15 @@ function getOpenRouter(): OpenAI {
         if (!process.env.OPENROUTER_API_KEY) {
             throw new Error("OPENROUTER_API_KEY is not set");
         }
+        const referer =
+            process.env.OPENROUTER_REFERER ?? OPENROUTER_DEFAULT_REFERER;
+        const title = process.env.OPENROUTER_TITLE ?? OPENROUTER_DEFAULT_TITLE;
         openrouterClient = new OpenAI({
             apiKey: process.env.OPENROUTER_API_KEY,
             baseURL: "https://openrouter.ai/api/v1",
             defaultHeaders: {
-                "HTTP-Referer": "https://ai-roadmap.app",
-                "X-Title": "AI Roadmap",
+                "HTTP-Referer": referer,
+                "X-Title": title,
             },
         });
     }
@@ -174,4 +179,3 @@ export async function callProvider(
             throw new Error(`Unknown provider: ${config.provider}`);
     }
 }
-

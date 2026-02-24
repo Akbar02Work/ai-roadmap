@@ -318,7 +318,7 @@ async function callLLMInternal<T>(
         );
 
         throw new LLMError(
-            `All LLM providers failed for "${input.task}" after ${totalAttempts} attempts. Last error: ${err.message}`,
+            "LLM provider unavailable",
             503,
             input.task
         );
