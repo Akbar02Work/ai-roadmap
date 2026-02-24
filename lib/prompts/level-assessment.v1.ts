@@ -3,7 +3,7 @@
 // CEFR diagnostic for language learners.
 // ============================================================
 
-import type { LLMMessage } from "@/lib/llm/types";
+import type { LLMMessage, Locale } from "@/lib/llm/types";
 
 export const PROMPT_VERSION = "level-assessment.v1";
 
@@ -13,7 +13,7 @@ interface LevelAssessmentContext {
 }
 
 export function buildPrompt(
-    locale: string,
+    locale: Locale,
     ctx: LevelAssessmentContext
 ): LLMMessage[] {
     const lang = locale === "ru" ? "Russian" : "English";

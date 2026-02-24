@@ -2,6 +2,7 @@
 // Usage Limits — check + increment per-user daily limits
 // ============================================================
 
+import "server-only";
 import { prisma } from "@/lib/db";
 import { type Plan, PLAN_LIMITS } from "./types";
 

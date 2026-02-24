@@ -3,6 +3,7 @@
 // Prisma v7 requires a pg adapter for the "client" engine.
 // ============================================================
 
+import "server-only";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 

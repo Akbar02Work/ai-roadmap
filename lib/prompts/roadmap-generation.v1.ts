@@ -3,7 +3,7 @@
 // Generates a structured learning roadmap from goal + diagnosis.
 // ============================================================
 
-import type { LLMMessage } from "@/lib/llm/types";
+import type { LLMMessage, Locale } from "@/lib/llm/types";
 
 export const PROMPT_VERSION = "roadmap-generation.v1";
 
@@ -19,7 +19,7 @@ interface RoadmapGenContext {
 }
 
 export function buildPrompt(
-    locale: string,
+    locale: Locale,
     ctx: RoadmapGenContext
 ): LLMMessage[] {
     const lang = locale === "ru" ? "Russian" : "English";

@@ -8,6 +8,7 @@ export { checkUsageLimit, incrementUsage } from "./usage";
 export type {
     LLMTask,
     LLMProvider,
+    Locale,
     CallLLMInput,
     CallLLMResult,
     LLMCallMeta,

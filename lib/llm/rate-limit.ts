@@ -5,6 +5,7 @@
 // - dev/test: in-memory limiter with explicit warning
 // ============================================================
 
+import "server-only";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 
@@ -14,11 +15,28 @@ let upstashErrorLogged = false;
 let inMemoryFallbackLogged = false;
 let lastUpstashErrorReason: string | null = null;
 
+function validateUpstashUrl(url: string): string | null {
+    try {
+        const parsed = new URL(url);
+        if (parsed.protocol !== "https:") {
+            return "UPSTASH_REDIS_REST_URL must use https protocol.";
+        }
+        return null;
+    } catch {
+        return "UPSTASH_REDIS_REST_URL is not a valid URL.";
+    }
+}
+
 function getRedis(): Redis | null {
     const url = process.env.UPSTASH_REDIS_REST_URL;
     const token = process.env.UPSTASH_REDIS_REST_TOKEN;
     if (!url || !token) {
         lastUpstashErrorReason = "UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN are not set.";
+        return null;
+    }
+    const validationError = validateUpstashUrl(url);
+    if (validationError) {
+        lastUpstashErrorReason = validationError;
         return null;
     }
     try {
@@ -125,7 +143,7 @@ function runInMemoryLimiter(
 }
 
 /**
- * Check rate limit. Returns { allowed: true } if Upstash is not configured (graceful no-op).
+ * Check rate limit with controlled fallback on missing/misconfigured Upstash.
  * @param identifier - unique identifier (userId or IP)
  * @param strict - use strict limits (for expensive endpoints like roadmap generation)
  */

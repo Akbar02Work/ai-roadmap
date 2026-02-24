@@ -3,7 +3,7 @@
 // Grades user-submitted artifacts/reports against a rubric.
 // ============================================================
 
-import type { LLMMessage } from "@/lib/llm/types";
+import type { LLMMessage, Locale } from "@/lib/llm/types";
 
 export const PROMPT_VERSION = "grading-rubric.v1";
 
@@ -16,7 +16,7 @@ interface GradingContext {
 }
 
 export function buildPrompt(
-    locale: string,
+    locale: Locale,
     ctx: GradingContext
 ): LLMMessage[] {
     const lang = locale === "ru" ? "Russian" : "English";

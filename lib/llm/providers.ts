@@ -2,6 +2,7 @@
 // LLM Provider Clients — OpenAI + Anthropic raw callers
 // ============================================================
 
+import "server-only";
 import OpenAI from "openai";
 import type { ModelConfig, LLMMessage, RawLLMResponse } from "./types";
 
@@ -49,8 +50,7 @@ export async function callOpenAI(
 
 export async function callAnthropic(
     config: ModelConfig,
-    messages: LLMMessage[],
-    _jsonMode: boolean
+    messages: LLMMessage[]
 ): Promise<RawLLMResponse> {
     if (!process.env.ANTHROPIC_API_KEY) {
         throw new Error("ANTHROPIC_API_KEY is not set");
@@ -107,7 +107,7 @@ export async function callProvider(
         case "openai":
             return callOpenAI(config, messages, jsonMode);
         case "anthropic":
-            return callAnthropic(config, messages, jsonMode);
+            return callAnthropic(config, messages);
         default:
             throw new Error(`Unknown provider: ${config.provider}`);
     }

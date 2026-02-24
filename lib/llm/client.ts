@@ -6,6 +6,7 @@
 // Every call logged to ai_logs.
 // ============================================================
 
+import "server-only";
 import { z } from "zod/v4";
 import { prisma } from "@/lib/db";
 import { callProvider } from "./providers";

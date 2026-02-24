@@ -12,6 +12,7 @@ export type LLMTask =
     | "quality_check";
 
 export type LLMProvider = "openai" | "anthropic";
+export type Locale = "en" | "ru";
 
 export interface ModelConfig {
     provider: LLMProvider;
@@ -31,7 +32,7 @@ export interface TaskRouting {
 
 export interface CallLLMInput {
     task: LLMTask;
-    locale: string;
+    locale: Locale;
     userId?: string;
     promptVersion: string;
     messages: LLMMessage[];

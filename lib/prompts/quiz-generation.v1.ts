@@ -3,7 +3,7 @@
 // Generates a multiple-choice quiz on a given topic.
 // ============================================================
 
-import type { LLMMessage } from "@/lib/llm/types";
+import type { LLMMessage, Locale } from "@/lib/llm/types";
 
 export const PROMPT_VERSION = "quiz-generation.v1";
 
@@ -14,7 +14,7 @@ interface QuizPromptContext {
 }
 
 export function buildPrompt(
-    locale: string,
+    locale: Locale,
     ctx: QuizPromptContext
 ): LLMMessage[] {
     const lang = locale === "ru" ? "Russian" : "English";

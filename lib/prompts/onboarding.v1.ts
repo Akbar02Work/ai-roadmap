@@ -3,7 +3,7 @@
 // Initial onboarding conversation to gather goal details.
 // ============================================================
 
-import type { LLMMessage } from "@/lib/llm/types";
+import type { LLMMessage, Locale } from "@/lib/llm/types";
 
 export const PROMPT_VERSION = "onboarding.v1";
 
@@ -14,7 +14,7 @@ interface OnboardingPromptContext {
 }
 
 export function buildPrompt(
-    locale: string,
+    locale: Locale,
     ctx: OnboardingPromptContext
 ): LLMMessage[] {
     const lang = locale === "ru" ? "Russian" : "English";
