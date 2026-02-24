@@ -56,6 +56,7 @@ async function tryCall(
 
 async function logToAiLogs(
     input: CallLLMInput,
+    attemptedModel: string,
     raw: RawLLMResponse | null,
     status: "success" | "error",
     errorMessage?: string
@@ -65,11 +66,11 @@ async function logToAiLogs(
             data: {
                 userId: input.userId ?? null,
                 taskType: input.task,
-                model: raw?.model ?? "unknown",
+                model: raw?.model ?? attemptedModel,
                 promptVersion: input.promptVersion,
-                inputTokens: raw?.inputTokens ?? 0,
-                outputTokens: raw?.outputTokens ?? 0,
-                latencyMs: raw?.latencyMs ?? 0,
+                inputTokens: raw?.inputTokens ?? null,
+                outputTokens: raw?.outputTokens ?? null,
+                latencyMs: raw?.latencyMs ?? null,
                 status,
                 errorMessage: errorMessage?.slice(0, 2000) ?? null,
             },
@@ -104,7 +105,8 @@ function buildMeta(
 
 async function onSuccess(
     input: CallLLMInput,
-    raw: RawLLMResponse
+    raw: RawLLMResponse,
+    attemptedModel: string
 ): Promise<void> {
     if (input.userId) {
         const consumed = await consumeUsage(
@@ -113,11 +115,17 @@ async function onSuccess(
             1
         );
         if (!consumed.allowed) {
-            await logToAiLogs(input, raw, "error", consumed.reason ?? "Usage limit exceeded.");
+            await logToAiLogs(
+                input,
+                attemptedModel,
+                raw,
+                "error",
+                consumed.reason ?? "Usage limit exceeded."
+            );
             throw new LLMError(consumed.reason ?? "Usage limit exceeded.", 403, input.task);
         }
     }
-    await logToAiLogs(input, raw, "success");
+    await logToAiLogs(input, attemptedModel, raw, "success");
 }
 
 // ---- main function: plain string output ----------------------
@@ -175,20 +183,20 @@ async function callLLMInternal<T>(
     for (let attempt = 1; attempt <= PRIMARY_RETRIES; attempt++) {
         totalAttempts++;
         try {
-            const raw = await tryCall(routing.primary, input.messages, jsonMode);
-            lastRaw = raw;
+                const raw = await tryCall(routing.primary, input.messages, jsonMode);
+                lastRaw = raw;
 
-            if (schema) {
-                const data = parseAndValidate(raw.content, schema);
-                await onSuccess(input, raw);
-                return { data, meta: buildMeta(raw, input.promptVersion, totalAttempts, false) };
-            }
+                if (schema) {
+                    const data = parseAndValidate(raw.content, schema);
+                    await onSuccess(input, raw, routing.primary.model);
+                    return { data, meta: buildMeta(raw, input.promptVersion, totalAttempts, false) };
+                }
 
-            // No schema — return raw content
-            await onSuccess(input, raw);
-            return {
-                data: raw.content as T,
-                meta: buildMeta(raw, input.promptVersion, totalAttempts, false),
+                // No schema — return raw content
+                await onSuccess(input, raw, routing.primary.model);
+                return {
+                    data: raw.content as T,
+                    meta: buildMeta(raw, input.promptVersion, totalAttempts, false),
             };
         } catch (error) {
             lastError = error instanceof Error ? error : new Error(String(error));
@@ -199,7 +207,13 @@ async function callLLMInternal<T>(
                 `[LLM] Primary ${routing.primary.model} attempt ${attempt}/${PRIMARY_RETRIES}:`,
                 lastError.message
             );
-            await logToAiLogs(input, lastRaw, "error", lastError.message);
+            await logToAiLogs(
+                input,
+                routing.primary.model,
+                lastRaw,
+                "error",
+                lastError.message
+            );
 
             if (attempt < PRIMARY_RETRIES) {
                 await sleep(Math.pow(2, attempt) * 500);
@@ -217,11 +231,11 @@ async function callLLMInternal<T>(
 
         if (schema) {
             const data = parseAndValidate(raw.content, schema);
-            await onSuccess(input, raw);
+            await onSuccess(input, raw, routing.fallback.model);
             return { data, meta: buildMeta(raw, input.promptVersion, totalAttempts, true) };
         }
 
-        await onSuccess(input, raw);
+        await onSuccess(input, raw, routing.fallback.model);
         return {
             data: raw.content as T,
             meta: buildMeta(raw, input.promptVersion, totalAttempts, true),
@@ -231,7 +245,13 @@ async function callLLMInternal<T>(
         if (err instanceof LLMError && err.httpStatus === 403) {
             throw err;
         }
-        await logToAiLogs(input, lastRaw, "error", err.message);
+        await logToAiLogs(
+            input,
+            routing.fallback.model,
+            lastRaw,
+            "error",
+            err.message
+        );
 
         throw new LLMError(
             `All LLM providers failed for "${input.task}" after ${totalAttempts} attempts. Last error: ${err.message}`,
