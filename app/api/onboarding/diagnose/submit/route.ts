@@ -14,18 +14,26 @@ import {
 } from "@/lib/prompts/level-assessment.v1";
 import type { Locale } from "@/lib/llm/types";
 
+const DiagnoseSubmitQuestionSchema = z.object({
+    question: z.string().min(1),
+    type: z.enum(["multiple_choice", "translation", "fill_blank"]),
+    cefrTarget: z.enum(["A1", "A2", "B1", "B2", "C1"]),
+    options: z.array(z.string()).nullable(),
+});
+
 const RequestBodySchema = z.object({
     goalId: z.string().uuid(),
     sessionId: z.string().uuid(),
-    questions: z.array(
-        z.object({
-            question: z.string(),
-            type: z.string(),
-            cefrTarget: z.string(),
-            options: z.array(z.string()).nullable().optional(),
-        })
-    ),
+    questions: z.array(DiagnoseSubmitQuestionSchema).min(1).max(10),
     answers: z.array(z.string()),
+}).superRefine((value, ctx) => {
+    if (value.answers.length !== value.questions.length) {
+        ctx.addIssue({
+            code: "custom",
+            message: "answers length must match questions length",
+            path: ["answers"],
+        });
+    }
 });
 
 export async function POST(request: NextRequest) {

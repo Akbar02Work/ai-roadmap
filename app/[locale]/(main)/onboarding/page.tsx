@@ -146,13 +146,12 @@ export default function OnboardingPage() {
                 saveSession(data.sessionId, data.goalId);
                 setPhase("chat");
             } catch {
-                setError("Failed to initialize. Please log in.");
+                setError(t("initError"));
                 setPhase("chat");
             }
         }
 
         init();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // --- Send message ---
@@ -233,7 +232,7 @@ export default function OnboardingPage() {
             setAnswers(new Array(data.questions.length).fill(""));
             setCurrentQ(0);
         } catch {
-            setError("Failed to start diagnostic");
+            setError(t("diagnosticStartError"));
         } finally {
             setIsLoading(false);
         }
@@ -261,7 +260,7 @@ export default function OnboardingPage() {
             });
             setPhase("done");
         } catch {
-            setError("Failed to submit diagnostic");
+            setError(t("diagnosticSubmitError"));
         } finally {
             setIsLoading(false);
         }
@@ -290,7 +289,7 @@ export default function OnboardingPage() {
                 {phase === "loading" && (
                     <div className="flex flex-1 items-center justify-center">
                         <div className="animate-pulse text-muted-foreground">
-                            Loading...
+                            {t("loading")}
                         </div>
                     </div>
                 )}
@@ -539,7 +538,7 @@ export default function OnboardingPage() {
                                 <>
                                     <div className="text-6xl">✅</div>
                                     <h2 className="text-2xl font-bold">
-                                        Onboarding complete!
+                                        {t("completeTitle")}
                                     </h2>
                                 </>
                             )}

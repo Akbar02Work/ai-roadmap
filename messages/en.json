@@ -42,6 +42,7 @@
     },
     "onboarding": {
         "title": "Let's build your roadmap",
+        "loading": "Loading...",
         "placeholder": "Type your message...",
         "send": "Send",
         "generating": "Generating your roadmap...",
@@ -51,7 +52,11 @@
         "diagnosticResult": "Your level: {level}",
         "phase4Placeholder": "Your roadmap will be generated in Phase 4. Stay tuned!",
         "errorSending": "Failed to send message. Please try again.",
+        "initError": "Failed to initialize. Please log in.",
         "sessionExpired": "Session expired. Please start a new session.",
+        "diagnosticStartError": "Failed to start diagnostic",
+        "diagnosticSubmitError": "Failed to submit diagnostic",
+        "completeTitle": "Onboarding complete!",
         "answerPlaceholder": "Type your answer...",
         "questionOf": "Question {current} of {total}"
     },
