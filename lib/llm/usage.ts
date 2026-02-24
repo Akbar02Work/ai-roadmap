@@ -27,6 +27,25 @@ interface UsagePlanSnapshot {
     limits: { aiMessagesPerDay: number; tokensPerDay: number };
 }
 
+const USAGE_ENFORCEMENT_UNAVAILABLE_REASON = "Usage enforcement unavailable.";
+const USAGE_ENFORCEMENT_MIGRATION_MISSING_REASON =
+    "Usage enforcement migration not applied (0002_usage_rpc.sql).";
+
+interface SupabaseRpcErrorLike {
+    code?: string;
+    message?: string;
+    details?: string;
+    hint?: string;
+}
+
+function isMissingConsumeUsageRpc(error: SupabaseRpcErrorLike): boolean {
+    const message = `${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`.toLowerCase();
+    if (error.code === "42883") {
+        return true;
+    }
+    return message.includes("consume_usage_v1") && message.includes("does not exist");
+}
+
 function normalizePlan(plan: unknown): Plan {
     switch (plan) {
         case "free":
@@ -296,11 +315,25 @@ export async function consumeUsageWithSupabase(
         });
 
         if (error) {
+            if (isMissingConsumeUsageRpc(error)) {
+                console.error(
+                    "[usage] consume_usage_v1 missing. Apply migration 0002_usage_rpc.sql.",
+                    {
+                        code: error.code,
+                        message: error.message,
+                    }
+                );
+                return {
+                    allowed: false,
+                    statusCode: 503,
+                    reason: USAGE_ENFORCEMENT_MIGRATION_MISSING_REASON,
+                };
+            }
             console.error("[usage] consume_usage_v1 rpc error:", error);
             return {
                 allowed: false,
                 statusCode: 503,
-                reason: "Usage enforcement unavailable.",
+                reason: USAGE_ENFORCEMENT_UNAVAILABLE_REASON,
             };
         }
 
@@ -319,11 +352,26 @@ export async function consumeUsageWithSupabase(
         return { allowed: true };
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        if (
+            isMissingConsumeUsageRpc({
+                message,
+            })
+        ) {
+            console.error(
+                "[usage] consume_usage_v1 missing. Apply migration 0002_usage_rpc.sql.",
+                { message }
+            );
+            return {
+                allowed: false,
+                statusCode: 503,
+                reason: USAGE_ENFORCEMENT_MIGRATION_MISSING_REASON,
+            };
+        }
         console.error("[usage] supabase usage consume failed:", message);
         return {
             allowed: false,
             statusCode: 503,
-            reason: "Usage enforcement unavailable.",
+            reason: USAGE_ENFORCEMENT_UNAVAILABLE_REASON,
         };
     }
 }
