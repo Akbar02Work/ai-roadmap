@@ -2,6 +2,8 @@
 // LLM Service Layer — Types
 // ============================================================
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 export type LLMTask =
     | "onboarding_chat"
     | "level_assessment"
@@ -36,6 +38,13 @@ export interface CallLLMInput {
     userId?: string;
     promptVersion: string;
     messages: LLMMessage[];
+}
+
+export type LLMDatabase = any;
+
+export interface CallLLMContext {
+    userId: string;
+    supabase: SupabaseClient<LLMDatabase>;
 }
 
 export interface CallLLMResult<T = string> {

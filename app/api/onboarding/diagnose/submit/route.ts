@@ -71,7 +71,8 @@ export async function POST(request: NextRequest) {
                 promptVersion: PROMPT_VERSION,
                 messages,
             },
-            DiagnoseResultSchema
+            DiagnoseResultSchema,
+            { userId, supabase }
         );
 
         const { cefrLevel, explanation } = result.data;

@@ -114,7 +114,8 @@ export async function POST(request: NextRequest) {
                 promptVersion: PROMPT_VERSION,
                 messages,
             },
-            OnboardingChatOutputSchema
+            OnboardingChatOutputSchema,
+            { userId, supabase }
         );
 
         const { assistantMessage, collected, nextAction } = llmResult.data;

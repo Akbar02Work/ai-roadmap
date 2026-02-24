@@ -10,10 +10,16 @@ import "server-only";
 import { z } from "zod/v4";
 import { prisma } from "@/lib/db";
 import { callProvider } from "./providers";
-import { checkUsageLimit, consumeUsage } from "./usage";
+import {
+    checkUsageLimit,
+    checkUsageLimitWithSupabase,
+    consumeUsage,
+    consumeUsageWithSupabase,
+} from "./usage";
 import { checkRateLimit } from "./rate-limit";
 import type {
     CallLLMInput,
+    CallLLMContext,
     CallLLMResult,
     LLMCallMeta,
     RawLLMResponse,
@@ -60,9 +66,28 @@ async function logToAiLogs(
     attemptedModel: string,
     raw: RawLLMResponse | null,
     status: "success" | "error",
-    errorMessage?: string
+    errorMessage?: string,
+    ctx?: CallLLMContext
 ): Promise<void> {
     try {
+        if (ctx) {
+            const { error } = await ctx.supabase.from("ai_logs").insert({
+                user_id: ctx.userId,
+                task_type: input.task,
+                model: raw?.model ?? attemptedModel,
+                prompt_version: input.promptVersion,
+                input_tokens: raw?.inputTokens ?? null,
+                output_tokens: raw?.outputTokens ?? null,
+                latency_ms: raw?.latencyMs ?? null,
+                status,
+                error_message: errorMessage?.slice(0, 2000) ?? null,
+            });
+            if (error) {
+                throw new Error(error.message);
+            }
+            return;
+        }
+
         await prisma.aiLog.create({
             data: {
                 userId: input.userId ?? null,
@@ -107,11 +132,12 @@ function buildMeta(
 async function onSuccess(
     input: CallLLMInput,
     raw: RawLLMResponse,
-    attemptedModel: string
+    attemptedModel: string,
+    ctx?: CallLLMContext
 ): Promise<void> {
-    if (input.userId) {
-        const consumed = await consumeUsage(
-            input.userId,
+    if (ctx) {
+        const consumed = await consumeUsageWithSupabase(
+            ctx,
             raw.inputTokens + raw.outputTokens,
             1
         );
@@ -121,43 +147,72 @@ async function onSuccess(
                 attemptedModel,
                 raw,
                 "error",
-                consumed.reason ?? "Usage limit exceeded."
+                consumed.reason ?? "Usage limit exceeded.",
+                ctx
             );
-            throw new LLMError(consumed.reason ?? "Usage limit exceeded.", 403, input.task);
+            throw new LLMError(
+                consumed.reason ?? "Usage limit exceeded.",
+                consumed.statusCode ?? 403,
+                input.task
+            );
+        }
+    } else if (input.userId) {
+        const consumed = await consumeUsage(input.userId, raw.inputTokens + raw.outputTokens, 1);
+        if (!consumed.allowed) {
+            await logToAiLogs(
+                input,
+                attemptedModel,
+                raw,
+                "error",
+                consumed.reason ?? "Usage limit exceeded.",
+                ctx
+            );
+            throw new LLMError(
+                consumed.reason ?? "Usage limit exceeded.",
+                consumed.statusCode ?? 403,
+                input.task
+            );
         }
     }
-    await logToAiLogs(input, attemptedModel, raw, "success");
+    await logToAiLogs(input, attemptedModel, raw, "success", undefined, ctx);
 }
 
 // ---- main function: plain string output ----------------------
 
 export async function callLLM(
-    input: CallLLMInput
+    input: CallLLMInput,
+    ctx?: CallLLMContext
 ): Promise<CallLLMResult<string>> {
-    return callLLMInternal(input, null);
+    return callLLMInternal(input, null, ctx);
 }
 
 // ---- main function: structured output with Zod schema --------
 
 export async function callLLMStructured<T>(
     input: CallLLMInput,
-    schema: z.ZodType<T>
+    schema: z.ZodType<T>,
+    ctx?: CallLLMContext
 ): Promise<CallLLMResult<T>> {
-    return callLLMInternal(input, schema);
+    return callLLMInternal(input, schema, ctx);
 }
 
 // ---- internal implementation ---------------------------------
 
 async function callLLMInternal<T>(
     input: CallLLMInput,
-    schema: z.ZodType<T> | null
+    schema: z.ZodType<T> | null,
+    ctx?: CallLLMContext
 ): Promise<CallLLMResult<T>> {
+    const effectiveInput: CallLLMInput = {
+        ...input,
+        userId: ctx?.userId ?? input.userId,
+    };
     const routing = MODEL_ROUTING[input.task];
     const jsonMode = schema !== null;
     let totalAttempts = 0;
 
     // 1. Rate limiting (uses userId or "anon")
-    const rlResult = await checkRateLimit(input.userId ?? "anon");
+    const rlResult = await checkRateLimit(effectiveInput.userId ?? "anon");
     if (!rlResult.allowed) {
         throw new LLMError(
             rlResult.reason ??
@@ -170,10 +225,16 @@ async function callLLMInternal<T>(
     }
 
     // 2. Usage limit check (only for authenticated users)
-    if (input.userId) {
-        const usageResult = await checkUsageLimit(input.userId);
+    if (effectiveInput.userId) {
+        const usageResult = ctx
+            ? await checkUsageLimitWithSupabase(ctx)
+            : await checkUsageLimit(effectiveInput.userId);
         if (!usageResult.allowed) {
-            throw new LLMError(usageResult.reason ?? "Usage limit exceeded.", 403, input.task);
+            throw new LLMError(
+                usageResult.reason ?? "Usage limit exceeded.",
+                usageResult.statusCode ?? 403,
+                input.task
+            );
         }
     }
 
@@ -189,19 +250,19 @@ async function callLLMInternal<T>(
 
                 if (schema) {
                     const data = parseAndValidate(raw.content, schema);
-                    await onSuccess(input, raw, routing.primary.model);
+                    await onSuccess(effectiveInput, raw, routing.primary.model, ctx);
                     return { data, meta: buildMeta(raw, input.promptVersion, totalAttempts, false) };
                 }
 
                 // No schema — return raw content
-                await onSuccess(input, raw, routing.primary.model);
+                await onSuccess(effectiveInput, raw, routing.primary.model, ctx);
                 return {
                     data: raw.content as T,
                     meta: buildMeta(raw, input.promptVersion, totalAttempts, false),
             };
         } catch (error) {
             lastError = error instanceof Error ? error : new Error(String(error));
-            if (lastError instanceof LLMError && lastError.httpStatus === 403) {
+            if (lastError instanceof LLMError) {
                 throw lastError;
             }
             console.error(
@@ -209,11 +270,12 @@ async function callLLMInternal<T>(
                 lastError.message
             );
             await logToAiLogs(
-                input,
+                effectiveInput,
                 routing.primary.model,
                 lastRaw,
                 "error",
-                lastError.message
+                lastError.message,
+                ctx
             );
 
             if (attempt < PRIMARY_RETRIES) {
@@ -232,26 +294,27 @@ async function callLLMInternal<T>(
 
         if (schema) {
             const data = parseAndValidate(raw.content, schema);
-            await onSuccess(input, raw, routing.fallback.model);
+            await onSuccess(effectiveInput, raw, routing.fallback.model, ctx);
             return { data, meta: buildMeta(raw, input.promptVersion, totalAttempts, true) };
         }
 
-        await onSuccess(input, raw, routing.fallback.model);
+        await onSuccess(effectiveInput, raw, routing.fallback.model, ctx);
         return {
             data: raw.content as T,
             meta: buildMeta(raw, input.promptVersion, totalAttempts, true),
         };
     } catch (error) {
         const err = error instanceof Error ? error : new Error(String(error));
-        if (err instanceof LLMError && err.httpStatus === 403) {
+        if (err instanceof LLMError) {
             throw err;
         }
         await logToAiLogs(
-            input,
+            effectiveInput,
             routing.fallback.model,
             lastRaw,
             "error",
-            err.message
+            err.message,
+            ctx
         );
 
         throw new LLMError(
