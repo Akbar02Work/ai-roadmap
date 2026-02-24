@@ -1,0 +1,114 @@
+// ============================================================
+// LLM Provider Clients — OpenAI + Anthropic raw callers
+// ============================================================
+
+import "server-only";
+import OpenAI from "openai";
+import type { ModelConfig, LLMMessage, RawLLMResponse } from "./types";
+
+// ---- OpenAI --------------------------------------------------
+
+let openaiClient: OpenAI | null = null;
+
+function getOpenAI(): OpenAI {
+    if (!openaiClient) {
+        if (!process.env.OPENAI_API_KEY) {
+            throw new Error("OPENAI_API_KEY is not set");
+        }
+        openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    }
+    return openaiClient;
+}
+
+export async function callOpenAI(
+    config: ModelConfig,
+    messages: LLMMessage[],
+    jsonMode: boolean
+): Promise<RawLLMResponse> {
+    const client = getOpenAI();
+    const start = Date.now();
+
+    const completion = await client.chat.completions.create({
+        model: config.model,
+        messages,
+        temperature: config.temperature ?? 0.5,
+        max_tokens: config.maxTokens ?? 4096,
+        ...(jsonMode ? { response_format: { type: "json_object" } } : {}),
+    });
+
+    return {
+        content: completion.choices[0]?.message?.content ?? "",
+        model: config.model,
+        provider: "openai",
+        inputTokens: completion.usage?.prompt_tokens ?? 0,
+        outputTokens: completion.usage?.completion_tokens ?? 0,
+        latencyMs: Date.now() - start,
+    };
+}
+
+// ---- Anthropic -----------------------------------------------
+
+export async function callAnthropic(
+    config: ModelConfig,
+    messages: LLMMessage[]
+): Promise<RawLLMResponse> {
+    if (!process.env.ANTHROPIC_API_KEY) {
+        throw new Error("ANTHROPIC_API_KEY is not set");
+    }
+
+    const start = Date.now();
+    const systemMessage = messages.find((m) => m.role === "system");
+    const otherMessages = messages.filter((m) => m.role !== "system");
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "x-api-key": process.env.ANTHROPIC_API_KEY,
+            "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+            model: config.model,
+            max_tokens: config.maxTokens ?? 4096,
+            temperature: config.temperature ?? 0.5,
+            ...(systemMessage ? { system: systemMessage.content } : {}),
+            messages: otherMessages.map((m) => ({
+                role: m.role,
+                content: m.content,
+            })),
+        }),
+    });
+
+    if (!response.ok) {
+        const body = await response.text();
+        throw new Error(`Anthropic ${response.status}: ${body}`);
+    }
+
+    const data = await response.json();
+
+    return {
+        content: data.content?.[0]?.text ?? "",
+        model: config.model,
+        provider: "anthropic",
+        inputTokens: data.usage?.input_tokens ?? 0,
+        outputTokens: data.usage?.output_tokens ?? 0,
+        latencyMs: Date.now() - start,
+    };
+}
+
+// ---- Dispatcher ----------------------------------------------
+
+export async function callProvider(
+    config: ModelConfig,
+    messages: LLMMessage[],
+    jsonMode: boolean
+): Promise<RawLLMResponse> {
+    switch (config.provider) {
+        case "openai":
+            return callOpenAI(config, messages, jsonMode);
+        case "anthropic":
+            return callAnthropic(config, messages);
+        default:
+            throw new Error(`Unknown provider: ${config.provider}`);
+    }
+}
