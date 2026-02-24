@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 
 // --- Types ---
 
@@ -47,6 +47,7 @@ function saveSession(sessionId: string, goalId: string) {
 
 export default function OnboardingPage() {
     const t = useTranslations("onboarding");
+    const locale = useLocale();
 
     const [phase, setPhase] = useState<Phase>("loading");
     const [sessionId, setSessionId] = useState<string | null>(null);
@@ -136,7 +137,7 @@ export default function OnboardingPage() {
                 });
                 if (res.status === 401) {
                     // Not authenticated — redirect to login
-                    window.location.href = "/en/login";
+                    window.location.href = `/${locale}/login`;
                     return;
                 }
                 if (!res.ok) throw new Error("Failed to start session");
@@ -152,7 +153,7 @@ export default function OnboardingPage() {
         }
 
         init();
-    }, []);
+    }, [locale]);
 
     // --- Send message ---
 

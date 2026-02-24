@@ -43,6 +43,32 @@ export async function POST(request: NextRequest) {
         const raw = await request.json();
         const body = RequestBodySchema.parse(raw);
 
+        // Verify session ownership via onboarding_sessions -> goals(user_id)
+        const { data: session, error: sessionError } = await supabase
+            .from("onboarding_sessions")
+            .select("id, goal_id, goals!inner(user_id)")
+            .eq("id", body.sessionId)
+            .eq("goals.user_id", userId)
+            .maybeSingle();
+
+        if (sessionError) {
+            console.error(
+                "[onboarding/diagnose/submit] session ownership query error:",
+                sessionError
+            );
+            return NextResponse.json(
+                { error: "Failed to verify session" },
+                { status: 500 }
+            );
+        }
+
+        if (!session || session.goal_id !== body.goalId) {
+            return NextResponse.json(
+                { error: "Session not found" },
+                { status: 404 }
+            );
+        }
+
         // Fetch goal (RLS ensures ownership)
         const { data: goal, error: goalError } = await supabase
             .from("goals")
@@ -92,7 +118,7 @@ export async function POST(request: NextRequest) {
             assessmentExplanation: explanation,
         };
 
-        await supabase
+        const { error: goalUpdateError } = await supabase
             .from("goals")
             .update({
                 cefr_level: cefrLevel,
@@ -100,11 +126,42 @@ export async function POST(request: NextRequest) {
             })
             .eq("id", body.goalId);
 
+        if (goalUpdateError) {
+            console.error(
+                "[onboarding/diagnose/submit] goal update error:",
+                goalUpdateError
+            );
+            return NextResponse.json(
+                { error: "Failed to update goal" },
+                { status: 500 }
+            );
+        }
+
         // Mark session as completed
-        await supabase
+        const { data: updatedSessions, error: sessionUpdateError } =
+            await supabase
             .from("onboarding_sessions")
             .update({ status: "completed" })
-            .eq("id", body.sessionId);
+            .eq("id", body.sessionId)
+            .select("id");
+
+        if (sessionUpdateError) {
+            console.error(
+                "[onboarding/diagnose/submit] session update error:",
+                sessionUpdateError
+            );
+            return NextResponse.json(
+                { error: "Failed to update session" },
+                { status: 500 }
+            );
+        }
+
+        if (!updatedSessions || updatedSessions.length !== 1) {
+            return NextResponse.json(
+                { error: "Session not found" },
+                { status: 404 }
+            );
+        }
 
         return NextResponse.json({ cefrLevel, explanation });
     } catch (err) {
