@@ -152,6 +152,11 @@ export default function NodePage() {
         }
     }
 
+    function handleRetry() {
+        setResult(null);
+        setError(null);
+    }
+
     if (loading) {
         return (
             <div className="flex min-h-[60vh] items-center justify-center">
@@ -173,6 +178,7 @@ export default function NodePage() {
     if (!node) return null;
 
     const allAnswered = quiz ? answers.every((a) => a !== null) : false;
+    const answeredCount = quiz ? answers.filter((answer) => answer !== null).length : 0;
 
     return (
         <div className="mx-auto max-w-3xl p-6">
@@ -200,19 +206,19 @@ export default function NodePage() {
                         </span>
                     ))}
                     <span className="text-xs text-muted-foreground">
-                        ⏱ {node.est_minutes} min
+                        ⏱ {t("durationMinutes", { minutes: node.est_minutes })}
                     </span>
                 </div>
             </div>
 
-            {/* Result (after submission) */}
-            {result && (
+            {/* Result (after successful completion) */}
+            {result?.passed && (
                 <div className="mb-6 rounded-xl border-2 border-primary/30 bg-primary/5 p-6 text-center">
                     <div className="text-4xl">
-                        {result.passed ? "✅" : "❌"}
+                        ✅
                     </div>
                     <h2 className="mt-2 text-xl font-bold">
-                        {result.passed ? t("passed") : t("failed")}
+                        {t("completed")}
                     </h2>
                     <p className="mt-1 text-muted-foreground">
                         {t("scoreText", {
@@ -230,8 +236,33 @@ export default function NodePage() {
                 </div>
             )}
 
+            {/* Result (after failed attempt) */}
+            {result && !result.passed && (
+                <div className="mb-6 rounded-xl border-2 border-destructive/30 bg-destructive/5 p-6 text-center">
+                    <div className="text-4xl">
+                        ❌
+                    </div>
+                    <h2 className="mt-2 text-xl font-bold">
+                        {t("notPassed")}
+                    </h2>
+                    <p className="mt-1 text-muted-foreground">
+                        {t("scoreText", {
+                            correct: result.correct,
+                            total: result.total,
+                            pct: Math.round(result.score * 100),
+                        })}
+                    </p>
+                    <button
+                        onClick={handleRetry}
+                        className="mt-4 rounded-xl bg-primary px-6 py-3 text-sm font-medium text-primary-foreground transition hover:opacity-90"
+                    >
+                        {t("retryQuiz")}
+                    </button>
+                </div>
+            )}
+
             {/* No quiz yet */}
-            {!quiz && !result && (
+            {!quiz && !result?.passed && (
                 <div className="rounded-xl border border-border/50 bg-card p-8 text-center">
                     <p className="text-muted-foreground">
                         {t("noQuizYet")}
@@ -249,6 +280,13 @@ export default function NodePage() {
             {/* Quiz */}
             {quiz && !result && (
                 <div className="space-y-6">
+                    <p className="text-sm text-muted-foreground">
+                        {t("answeredCount", {
+                            answered: answeredCount,
+                            total: quiz.length,
+                        })}
+                    </p>
+
                     {quiz.map((q, qIdx) => (
                         <div
                             key={qIdx}
@@ -305,7 +343,7 @@ export default function NodePage() {
                         disabled={!allAnswered || submitting}
                         className="w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-50"
                     >
-                        {submitting ? "..." : t("submit")}
+                        {submitting ? t("submitting") : t("submit")}
                     </button>
                 </div>
             )}
