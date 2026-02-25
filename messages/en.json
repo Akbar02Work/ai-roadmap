@@ -89,6 +89,7 @@
         "bestStreak": "Best",
         "todayMin": "Today min",
         "weekMin": "Week min",
+        "chartTooltip": "{day}: {minutes} min",
         "noGoals": "No active goals yet. Start by creating one!",
         "createGoal": "Create New Goal",
         "viewRoadmap": "View Roadmap",

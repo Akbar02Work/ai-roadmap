@@ -293,7 +293,10 @@ export default function DashboardPage() {
                                                             minHeight: "4px",
                                                             maxHeight: "40px",
                                                         }}
-                                                        title={`${d.day}: ${d.minutes} min`}
+                                                        title={t("chartTooltip", {
+                                                            day: d.day,
+                                                            minutes: d.minutes,
+                                                        })}
                                                     />
                                                     <span className="mt-1 text-[10px] text-muted-foreground">
                                                         {dayLabel}
@@ -322,7 +325,7 @@ export default function DashboardPage() {
                                                 <button
                                                     onClick={() =>
                                                         router.push(
-                                                            `/${locale}/roadmap/${activeRoadmap.id}/node/${due[0].id}`
+                                                            `/${locale}/roadmap/${activeRoadmap.id}`
                                                         )
                                                     }
                                                     className="rounded-lg border border-primary bg-primary/10 px-4 py-2 text-sm font-medium text-primary transition hover:bg-primary/20"
@@ -350,7 +353,7 @@ export default function DashboardPage() {
                                             className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-50"
                                         >
                                             {generating === goal.id
-                                                ? "..."
+                                                ? tCommon("loading")
                                                 : t("generateRoadmap")}
                                         </button>
                                     )}
@@ -365,7 +368,7 @@ export default function DashboardPage() {
                                             className="rounded-lg border border-border px-4 py-2 text-sm transition hover:bg-muted disabled:opacity-50"
                                         >
                                             {logging === goal.id
-                                                ? "..."
+                                                ? tCommon("loading")
                                                 : t("logMinutes")}
                                         </button>
                                     )}

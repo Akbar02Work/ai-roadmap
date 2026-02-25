@@ -89,6 +89,7 @@
         "bestStreak": "Лучшая",
         "todayMin": "Сегодня мин",
         "weekMin": "Неделя мин",
+        "chartTooltip": "{day}: {minutes} мин",
         "noGoals": "Пока нет активных целей. Начните с создания новой!",
         "createGoal": "Создать новую цель",
         "viewRoadmap": "Открыть роадмап",
