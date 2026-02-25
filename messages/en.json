@@ -115,6 +115,21 @@
         "failed": "Try Again",
         "dispute": "Dispute Result"
     },
+    "node": {
+        "backToRoadmap": "Back to roadmap",
+        "loadError": "Failed to load node",
+        "noQuizYet": "No quiz generated yet. Click the button to create one.",
+        "generateQuiz": "Generate Quiz",
+        "generatingQuiz": "Generating quiz...",
+        "generateError": "Failed to generate quiz. Please try again.",
+        "reportLabel": "Short report (what you learned, any difficulties)",
+        "reportPlaceholder": "Write a short note about your experience...",
+        "submit": "Submit",
+        "submitError": "Failed to submit. Please try again.",
+        "passed": "Completed! 🎉",
+        "failed": "Not passed — try again",
+        "scoreText": "{correct}/{total} correct ({pct}%)"
+    },
     "settings": {
         "title": "Settings",
         "language": "Language",

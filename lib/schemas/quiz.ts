@@ -6,16 +6,14 @@
 import { z } from "zod/v4";
 
 export const QuizQuestionSchema = z.object({
-    question: z.string(),
-    options: z.array(z.string()).min(2).max(6),
-    correctIndex: z.number().int().min(0),
+    prompt: z.string(),
+    options: z.array(z.string()).length(4),
+    correctIndex: z.number().int().min(0).max(3),
     explanation: z.string(),
 });
 
 export const QuizOutputSchema = z.object({
-    topic: z.string(),
-    level: z.string(),
-    questions: z.array(QuizQuestionSchema).min(1).max(20),
+    questions: z.array(QuizQuestionSchema).min(3).max(6),
 });
 
 export type QuizOutput = z.infer<typeof QuizOutputSchema>;

@@ -55,9 +55,11 @@ export async function POST(request: NextRequest) {
 
         // 2. Build prompt
         const messages = buildPrompt(locale, {
-            topic: body.topic,
-            level: body.level,
-            numQuestions: 3,
+            nodeTitle: body.topic,
+            nodeDescription: body.topic,
+            skills: [],
+            cefrLevel: body.level ?? "B1",
+            language: "English",
         });
 
         // 3. Call LLM with structured output
