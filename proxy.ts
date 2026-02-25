@@ -5,7 +5,7 @@ import { routing } from "@/i18n/routing";
 
 const intlMiddleware = createMiddleware(routing);
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
     // Skip auth session refresh for API routes
     if (request.nextUrl.pathname.startsWith("/api")) {
         return NextResponse.next();
@@ -13,6 +13,9 @@ export async function middleware(request: NextRequest) {
 
     // 1. Refresh Supabase auth session
     const supabaseResponse = await updateSession(request);
+    if (supabaseResponse.status === 503) {
+        return supabaseResponse;
+    }
 
     // 2. Handle i18n locale detection and routing
     const intlResponse = intlMiddleware(request);

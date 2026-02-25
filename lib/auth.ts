@@ -5,6 +5,7 @@
 
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { SupabaseConfigError } from "@/lib/supabase/env";
 
 export interface AuthResult {
     userId: string;
@@ -14,16 +15,30 @@ export interface AuthResult {
 /**
  * Require authenticated user. Returns userId and an authenticated
  * Supabase client that respects RLS policies.
- * Throws { status: 401, message } if not authenticated.
+ * Throws 401 if unauthenticated, 503 if auth backend is unavailable.
  */
 export async function requireAuth(): Promise<AuthResult> {
-    const supabase = await createClient();
+    let supabase: Awaited<ReturnType<typeof createClient>>;
+    try {
+        supabase = await createClient();
+    } catch (error) {
+        if (error instanceof SupabaseConfigError) {
+            throw new AuthError("Authentication service unavailable", 503);
+        }
+        throw error;
+    }
+
     const {
         data: { user },
         error,
     } = await supabase.auth.getUser();
 
-    if (error || !user) {
+    if (error) {
+        console.error("[auth] supabase.auth.getUser failed:", error.message);
+        throw new AuthError("Authentication service unavailable", 503);
+    }
+
+    if (!user) {
         throw new AuthError("Authentication required", 401);
     }
 

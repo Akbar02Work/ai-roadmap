@@ -96,19 +96,18 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // API key missing or other server error
-        const message =
-            err instanceof Error ? err.message : "Internal server error";
-        const isKeyMissing =
+        const message = err instanceof Error ? err.message : String(err);
+        const isProviderConfigError =
             message.includes("API_KEY") || message.includes("is not set");
+        console.error("[llm/test] unexpected error:", message);
 
         return NextResponse.json(
             {
-                error: isKeyMissing
-                    ? "LLM provider API key not configured. Set OPENAI_API_KEY and/or ANTHROPIC_API_KEY."
-                    : message,
+                error: isProviderConfigError
+                    ? "LLM provider configuration unavailable."
+                    : "LLM test request failed.",
             },
-            { status: isKeyMissing ? 503 : 500 }
+            { status: isProviderConfigError ? 503 : 500 }
         );
     }
 }

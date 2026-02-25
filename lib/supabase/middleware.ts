@@ -1,14 +1,35 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { getSupabasePublicEnv, SupabaseConfigError } from "@/lib/supabase/env";
+
+function serviceUnavailableResponse() {
+    return new NextResponse("Service unavailable", {
+        status: 503,
+        headers: {
+            "content-type": "text/plain; charset=utf-8",
+        },
+    });
+}
 
 export async function updateSession(request: NextRequest) {
+    let env;
+    try {
+        env = getSupabasePublicEnv("supabase/middleware");
+    } catch (error) {
+        if (error instanceof SupabaseConfigError) {
+            return serviceUnavailableResponse();
+        }
+        console.error("[supabase/middleware] Unexpected env resolution error:", error);
+        return serviceUnavailableResponse();
+    }
+
     let supabaseResponse = NextResponse.next({
         request,
     });
 
     const supabase = createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        env.url,
+        env.anonKey,
         {
             cookies: {
                 getAll() {
@@ -30,7 +51,11 @@ export async function updateSession(request: NextRequest) {
     );
 
     // Refresh the auth token
-    await supabase.auth.getUser();
+    const { error } = await supabase.auth.getUser();
+    if (error) {
+        console.error("[supabase/middleware] Failed to refresh auth session:", error.message);
+        return serviceUnavailableResponse();
+    }
 
     return supabaseResponse;
 }

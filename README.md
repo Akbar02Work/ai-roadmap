@@ -49,3 +49,24 @@ Recommended apply methods:
 2. Supabase CLI (if configured): `supabase db push` from the project root.
 
 `0003` is mandatory. Without it, new auth users may not get a `public.profiles` row at signup, which breaks the app's user-data invariant and can cause RLS-protected profile flows to fail.
+
+## Staging Checklist
+
+Before promoting to staging/production, verify all items:
+
+1. Migrations applied in order: `0001_rls.sql` -> `0002_usage_rpc.sql` -> `0003_profiles_trigger.sql`.
+2. Supabase env is set:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+3. LLM provider env is set for active routes:
+   - OpenAI path: `OPENAI_API_KEY`
+   - Anthropic fallback path: `ANTHROPIC_API_KEY`
+   - OpenRouter onboarding path: `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `OPENROUTER_REFERER`, `OPENROUTER_TITLE`
+4. Rate-limit backend configured for production:
+   - `UPSTASH_REDIS_REST_URL`
+   - `UPSTASH_REDIS_REST_TOKEN`
+   - (Without these, production rate-limited endpoints fail with `503`.)
+5. Auth flows verified:
+   - login/signup callback works (`/api/auth/callback`)
+   - new signup gets `public.profiles` row
+   - authenticated onboarding routes can read/write user-scoped data under RLS

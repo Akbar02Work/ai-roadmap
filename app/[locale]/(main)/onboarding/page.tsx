@@ -80,6 +80,26 @@ export default function OnboardingPage() {
 
     // --- Initialize session ---
 
+    const startDiagnostic = useCallback(async (gId: string) => {
+        setIsLoading(true);
+        try {
+            const res = await fetch("/api/onboarding/diagnose/generate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ goalId: gId }),
+            });
+            if (!res.ok) throw new Error("Failed to generate questions");
+            const data = await res.json();
+            setQuestions(data.questions);
+            setAnswers(new Array(data.questions.length).fill(""));
+            setCurrentQ(0);
+        } catch {
+            setError(t("diagnosticStartError"));
+        } finally {
+            setIsLoading(false);
+        }
+    }, [t]);
+
     useEffect(() => {
         async function init() {
             const saved = getSavedSession();
@@ -153,7 +173,7 @@ export default function OnboardingPage() {
         }
 
         init();
-    }, [locale]);
+    }, [locale, startDiagnostic, t]);
 
     // --- Send message ---
 
@@ -218,26 +238,6 @@ export default function OnboardingPage() {
     }
 
     // --- Diagnostic ---
-
-    async function startDiagnostic(gId: string) {
-        setIsLoading(true);
-        try {
-            const res = await fetch("/api/onboarding/diagnose/generate", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ goalId: gId }),
-            });
-            if (!res.ok) throw new Error("Failed to generate questions");
-            const data = await res.json();
-            setQuestions(data.questions);
-            setAnswers(new Array(data.questions.length).fill(""));
-            setCurrentQ(0);
-        } catch {
-            setError(t("diagnosticStartError"));
-        } finally {
-            setIsLoading(false);
-        }
-    }
 
     async function submitDiagnostic() {
         if (!goalId || !sessionId) return;
