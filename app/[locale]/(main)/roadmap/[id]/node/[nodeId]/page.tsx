@@ -27,7 +27,7 @@ export default function NodePage() {
     const locale = useLocale();
     const router = useRouter();
     const params = useParams();
-    const roadmapId = params.roadmapId as string;
+    const roadmapId = params.id as string;
     const nodeId = params.nodeId as string;
 
     const [node, setNode] = useState<NodeData | null>(null);
@@ -57,14 +57,33 @@ export default function NodePage() {
     // Load node
     useEffect(() => {
         async function load() {
+            let shouldStopLoading = true;
             try {
                 const res = await fetch(`/api/nodes/${nodeId}`);
                 if (res.status === 401) {
+                    shouldStopLoading = false;
                     router.replace(`/${locale}/login`);
                     return;
                 }
-                if (!res.ok) throw new Error(t("loadError"));
+                if (res.status === 403) {
+                    setError(t("forbidden"));
+                    return;
+                }
+                if (res.status === 404) {
+                    setError(t("notFound"));
+                    return;
+                }
+                if (!res.ok) {
+                    setError(t("loadError"));
+                    return;
+                }
+
                 const data = await res.json();
+                if (!data?.node || data.node.roadmap_id !== roadmapId) {
+                    setError(t("notFound"));
+                    return;
+                }
+
                 setNode(data.node);
 
                 // Check if quiz already exists
@@ -76,12 +95,14 @@ export default function NodePage() {
             } catch {
                 setError(t("loadError"));
             } finally {
-                setLoading(false);
+                if (shouldStopLoading) {
+                    setLoading(false);
+                }
             }
         }
 
-        if (nodeId) load();
-    }, [nodeId, locale, router, t]);
+        if (nodeId && roadmapId) load();
+    }, [nodeId, roadmapId, locale, router, t]);
 
     async function handleGenerateQuiz() {
         setGenerating(true);

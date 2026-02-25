@@ -118,6 +118,8 @@
     "node": {
         "backToRoadmap": "Back to roadmap",
         "loadError": "Failed to load node",
+        "forbidden": "You do not have access to this node",
+        "notFound": "Node not found",
         "noQuizYet": "No quiz generated yet. Click the button to create one.",
         "generateQuiz": "Generate Quiz",
         "generatingQuiz": "Generating quiz...",
