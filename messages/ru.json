@@ -63,7 +63,22 @@
     "auth": {
         "emailPlaceholder": "Email",
         "passwordPlaceholder": "Пароль (мин. 6 символов)",
-        "checkEmail": "Проверьте почту — мы отправили ссылку для подтверждения!"
+        "newPasswordPlaceholder": "Новый пароль (мин. 6 символов)",
+        "confirmPasswordPlaceholder": "Подтвердите новый пароль",
+        "checkEmail": "Проверьте почту — мы отправили ссылку для подтверждения!",
+        "forgotPassword": "Забыли пароль?",
+        "forgotTitle": "Сброс пароля",
+        "forgotDescription": "Введите ваш email, и мы отправим ссылку для сброса пароля.",
+        "sendResetLink": "Отправить ссылку",
+        "resetSent": "Если аккаунт с этим email существует, мы отправили ссылку для сброса.",
+        "resetTitle": "Установить новый пароль",
+        "resetDescription": "Введите новый пароль ниже.",
+        "resetButton": "Обновить пароль",
+        "resetSuccess": "Пароль обновлён! Перенаправляем на вход...",
+        "passwordMismatch": "Пароли не совпадают.",
+        "backToLogin": "Назад ко входу",
+        "logoutButton": "Выйти",
+        "loginRequired": "Войдите, чтобы продолжить."
     },
     "dashboard": {
         "title": "Панель управления",

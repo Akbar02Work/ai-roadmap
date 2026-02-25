@@ -2,22 +2,17 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { createBrowserClient } from "@supabase/ssr";
-import { useParams, useRouter } from "next/navigation";
-
-function getSupabase() {
-    return createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
-}
+import { createClient } from "@/lib/supabase/client";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 
 export default function LoginPage() {
     const t = useTranslations("nav");
     const tAuth = useTranslations("auth");
     const params = useParams();
     const router = useRouter();
+    const searchParams = useSearchParams();
     const locale = (params.locale as string) ?? "en";
+    const next = searchParams.get("next");
 
     const [mode, setMode] = useState<"login" | "signup">("login");
     const [email, setEmail] = useState("");
@@ -32,7 +27,7 @@ export default function LoginPage() {
         setMessage(null);
         setLoading(true);
 
-        const supabase = getSupabase();
+        const supabase = createClient();
 
         try {
             if (mode === "signup") {
@@ -49,7 +44,13 @@ export default function LoginPage() {
                 const { error: signInError } =
                     await supabase.auth.signInWithPassword({ email, password });
                 if (signInError) throw signInError;
-                router.push(`/${locale}/onboarding`);
+
+                // Redirect to next param or default
+                const target =
+                    next && next.startsWith("/") && !next.startsWith("//")
+                        ? next
+                        : `/${locale}/onboarding`;
+                router.push(target);
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : String(err));
@@ -129,6 +130,20 @@ export default function LoginPage() {
                                 : t("signup")}
                     </button>
                 </form>
+
+                {/* Forgot password link */}
+                {mode === "login" && (
+                    <div className="mt-4 text-center">
+                        <button
+                            onClick={() =>
+                                router.push(`/${locale}/forgot-password`)
+                            }
+                            className="text-sm text-muted-foreground transition hover:text-foreground hover:underline"
+                        >
+                            {tAuth("forgotPassword")}
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
     );
