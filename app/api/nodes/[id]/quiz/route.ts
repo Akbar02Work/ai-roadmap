@@ -6,9 +6,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/auth";
 import { callLLMStructured, LLMError } from "@/lib/llm";
-import { QuizOutputSchema } from "@/lib/schemas/quiz";
+import {
+    QuizOutputSchema,
+    QuizPublicOutputSchema,
+    toQuizPublic,
+} from "@/lib/schemas/quiz";
 import { buildPrompt, PROMPT_VERSION } from "@/lib/prompts/quiz-generation.v1";
 import type { Locale } from "@/lib/llm/types";
+
+const USAGE_MIGRATION_MISSING_REASON =
+    "Usage enforcement migration not applied (0002_usage_rpc.sql).";
+
+function extractQuizFull(
+    content: Record<string, unknown>
+): ReturnType<typeof QuizOutputSchema.parse> | null {
+    const candidate = content.quiz_full ?? content.quiz;
+    const parsed = QuizOutputSchema.safeParse(candidate);
+    return parsed.success ? parsed.data : null;
+}
+
+function extractQuizPublic(content: Record<string, unknown>) {
+    const publicCandidate = content.quiz_public ?? content.quiz;
+    const publicParsed = QuizPublicOutputSchema.safeParse(publicCandidate);
+    if (publicParsed.success) {
+        return publicParsed.data;
+    }
+    const full = extractQuizFull(content);
+    return full ? toQuizPublic(full) : null;
+}
 
 export async function POST(
     request: NextRequest,
@@ -34,8 +59,11 @@ export async function POST(
 
         // Check if quiz already exists
         const content = (node.content as Record<string, unknown>) ?? {};
-        if (content.quiz) {
-            return NextResponse.json({ quiz: content.quiz });
+        const existingQuizFull = extractQuizFull(content);
+        if (existingQuizFull) {
+            return NextResponse.json({
+                quiz: extractQuizPublic(content) ?? toQuizPublic(existingQuizFull),
+            });
         }
 
         // 2. Get goal context via roadmap chain
@@ -87,8 +115,15 @@ export async function POST(
             { userId, supabase }
         );
 
-        // 4. Save quiz to node.content.quiz
-        const updatedContent = { ...content, quiz: llmResult.data };
+        // 4. Save full quiz on server; return only sanitized public quiz.
+        const quizPublic = toQuizPublic(llmResult.data);
+        const updatedContent = {
+            ...content,
+            quiz_full: llmResult.data,
+            quiz_public: quizPublic,
+        } as Record<string, unknown>;
+        delete updatedContent.quiz;
+
         const { error: updateError } = await supabase
             .from("roadmap_nodes")
             .update({ content: updatedContent })
@@ -99,7 +134,7 @@ export async function POST(
             // Still return the quiz even if save failed
         }
 
-        return NextResponse.json({ quiz: llmResult.data }, { status: 201 });
+        return NextResponse.json({ quiz: quizPublic }, { status: 201 });
     } catch (err) {
         if (err instanceof AuthError) {
             return NextResponse.json(
@@ -114,6 +149,9 @@ export async function POST(
                     ? "Rate limit exceeded. Please try again later."
                     : status === 403
                         ? "Usage limit exceeded."
+                        : status === 503 &&
+                            err.message.includes("0002_usage_rpc.sql")
+                            ? USAGE_MIGRATION_MISSING_REASON
                         : "LLM provider unavailable. Please try again later.";
             return NextResponse.json({ error: safeMessage }, { status });
         }

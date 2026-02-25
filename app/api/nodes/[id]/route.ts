@@ -5,6 +5,27 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/auth";
+import {
+    QuizOutputSchema,
+    QuizPublicOutputSchema,
+    toQuizPublic,
+} from "@/lib/schemas/quiz";
+
+function extractQuizPublic(content: Record<string, unknown>) {
+    const publicCandidate = content.quiz_public ?? content.quiz;
+    const publicParsed = QuizPublicOutputSchema.safeParse(publicCandidate);
+    if (publicParsed.success) {
+        return publicParsed.data;
+    }
+
+    const fullCandidate = content.quiz_full ?? content.quiz;
+    const fullParsed = QuizOutputSchema.safeParse(fullCandidate);
+    if (fullParsed.success) {
+        return toQuizPublic(fullParsed.data);
+    }
+
+    return null;
+}
 
 export async function GET(
     _request: NextRequest,
@@ -44,7 +65,24 @@ export async function GET(
             goalContext = goal;
         }
 
-        return NextResponse.json({ node, goalContext });
+        const rawContent = (node.content as Record<string, unknown>) ?? {};
+        const sanitizedContent = Object.fromEntries(
+            Object.entries(rawContent).filter(
+                ([key]) => key !== "quiz" && key !== "quiz_full" && key !== "quiz_public"
+            )
+        ) as Record<string, unknown>;
+        const quizPublic = extractQuizPublic(rawContent);
+        if (quizPublic) {
+            sanitizedContent.quiz = quizPublic;
+        }
+
+        return NextResponse.json({
+            node: {
+                ...node,
+                content: sanitizedContent,
+            },
+            goalContext,
+        });
     } catch (err) {
         if (err instanceof AuthError) {
             return NextResponse.json(

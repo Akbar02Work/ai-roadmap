@@ -6,11 +6,32 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod/v4";
 import { requireAuth, AuthError } from "@/lib/auth";
+import { QuizOutputSchema } from "@/lib/schemas/quiz";
 
 const AttemptBodySchema = z.object({
-    answers: z.array(z.number().int().min(0).max(3)),
+    answers: z.array(z.number().int().min(0)),
     report: z.string().max(2000),
 });
+
+const NODE_PROGRESS_MIGRATION_MISSING_REASON =
+    "Node progress migration not applied (0006_node_progress_rpc.sql, 0007_node_progress_hardening.sql).";
+const NODE_PROGRESS_UNAVAILABLE_REASON = "Node progress unavailable.";
+
+interface SupabaseRpcErrorLike {
+    code?: string | null;
+    message?: string | null;
+    details?: string | null;
+    hint?: string | null;
+}
+
+function isMissingCompleteNodeRpc(error: SupabaseRpcErrorLike): boolean {
+    const message =
+        `${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`.toLowerCase();
+    if (error.code === "42883") {
+        return true;
+    }
+    return message.includes("complete_node_v1") && message.includes("does not exist");
+}
 
 export async function POST(
     request: NextRequest,
@@ -37,10 +58,26 @@ export async function POST(
             );
         }
 
-        const content = (node.content as Record<string, unknown>) ?? {};
-        const quiz = content.quiz as { questions: Array<{ correctIndex: number }> } | undefined;
+        if (node.status !== "active" && node.status !== "completed") {
+            return NextResponse.json(
+                { error: "node_not_active" },
+                { status: 400 }
+            );
+        }
 
-        if (!quiz || !quiz.questions?.length) {
+        const content = (node.content as Record<string, unknown>) ?? {};
+        const quizCandidate = content.quiz_full ?? content.quiz;
+        const quizParsed = QuizOutputSchema.safeParse(quizCandidate);
+
+        if (!quizParsed.success) {
+            return NextResponse.json(
+                { error: "Quiz data is invalid. Generate quiz again." },
+                { status: 400 }
+            );
+        }
+
+        const quiz = quizParsed.data;
+        if (!quiz.questions.length) {
             return NextResponse.json(
                 { error: "No quiz found. Generate one first." },
                 { status: 400 }
@@ -58,6 +95,12 @@ export async function POST(
 
         let correct = 0;
         for (let i = 0; i < totalQ; i++) {
+            if (body.answers[i] < 0 || body.answers[i] >= quiz.questions[i].options.length) {
+                return NextResponse.json(
+                    { error: `Answer index out of range at question ${i + 1}` },
+                    { status: 400 }
+                );
+            }
             if (body.answers[i] === quiz.questions[i].correctIndex) {
                 correct++;
             }
@@ -69,7 +112,41 @@ export async function POST(
         const minScore = typeof passRules.minScore === "number" ? passRules.minScore : 0.7;
         const passed = score >= minScore;
 
-        // 4. Create attempt record
+        // 4. If passed, complete node via RPC (fail-closed, no manual fallback).
+        let nextNodeId: string | null = null;
+        if (passed) {
+            const { data: rpcData, error: rpcError } = await supabase.rpc(
+                "complete_node_v1",
+                { p_node_id: nodeId }
+            );
+
+            if (rpcError) {
+                if (isMissingCompleteNodeRpc(rpcError)) {
+                    return NextResponse.json(
+                        { error: NODE_PROGRESS_MIGRATION_MISSING_REASON },
+                        { status: 503 }
+                    );
+                }
+
+                if (rpcError.code === "22023") {
+                    return NextResponse.json(
+                        { error: "node_not_active" },
+                        { status: 400 }
+                    );
+                }
+
+                console.error("[nodes/[id]/attempt] complete_node_v1 error:", rpcError);
+                return NextResponse.json(
+                    { error: NODE_PROGRESS_UNAVAILABLE_REASON },
+                    { status: 503 }
+                );
+            }
+
+            const firstRow = Array.isArray(rpcData) ? rpcData[0] : rpcData;
+            nextNodeId = firstRow?.next_node_id ?? null;
+        }
+
+        // 5. Create attempt record
         const { error: attemptError } = await supabase
             .from("attempts")
             .insert({
@@ -89,31 +166,6 @@ export async function POST(
                 { error: "Failed to save attempt" },
                 { status: 500 }
             );
-        }
-
-        // 5. If passed, complete node via RPC
-        let nextNodeId: string | null = null;
-        if (passed) {
-            const { data: rpcData, error: rpcError } = await supabase.rpc(
-                "complete_node_v1",
-                { p_node_id: nodeId }
-            );
-
-            if (rpcError) {
-                // If RPC not found (migration not applied), fall back to manual update
-                if (rpcError.code === "42883") {
-                    console.warn("[nodes/[id]/attempt] complete_node_v1 not found, using manual update");
-                    await supabase
-                        .from("roadmap_nodes")
-                        .update({ status: "completed" })
-                        .eq("id", nodeId);
-                } else {
-                    console.error("[nodes/[id]/attempt] complete_node_v1 error:", rpcError);
-                }
-            } else {
-                const firstRow = Array.isArray(rpcData) ? rpcData[0] : rpcData;
-                nextNodeId = firstRow?.next_node_id ?? null;
-            }
         }
 
         return NextResponse.json({

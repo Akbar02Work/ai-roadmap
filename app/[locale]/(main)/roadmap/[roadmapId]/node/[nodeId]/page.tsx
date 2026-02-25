@@ -7,8 +7,6 @@ import { useParams, useRouter } from "next/navigation";
 interface QuizQuestion {
     prompt: string;
     options: string[];
-    correctIndex: number;
-    explanation: string;
 }
 
 interface NodeData {

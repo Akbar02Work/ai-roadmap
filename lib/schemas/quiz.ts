@@ -16,5 +16,24 @@ export const QuizOutputSchema = z.object({
     questions: z.array(QuizQuestionSchema).min(3).max(6),
 });
 
+export const QuizPublicQuestionSchema = z.object({
+    prompt: z.string(),
+    options: z.array(z.string()),
+});
+
+export const QuizPublicOutputSchema = z.object({
+    questions: z.array(QuizPublicQuestionSchema).min(1),
+});
+
 export type QuizOutput = z.infer<typeof QuizOutputSchema>;
 export type QuizQuestion = z.infer<typeof QuizQuestionSchema>;
+export type QuizPublicOutput = z.infer<typeof QuizPublicOutputSchema>;
+
+export function toQuizPublic(quiz: QuizOutput): QuizPublicOutput {
+    return {
+        questions: quiz.questions.map((question) => ({
+            prompt: question.prompt,
+            options: question.options,
+        })),
+    };
+}
