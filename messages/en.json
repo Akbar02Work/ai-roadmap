@@ -103,6 +103,7 @@
         "startLesson": "Start Lesson",
         "loading": "Loading roadmap...",
         "loadError": "Failed to load roadmap",
+        "forbidden": "You do not have access to this roadmap",
         "notFound": "Roadmap not found"
     },
     "quiz": {

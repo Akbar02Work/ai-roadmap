@@ -19,6 +19,51 @@ const RequestBodySchema = z.object({
     regenerationReason: z.string().optional(),
 });
 
+const USAGE_MIGRATION_MISSING_REASON =
+    "Usage enforcement migration not applied (0002_usage_rpc.sql).";
+const ROADMAP_MIGRATION_MISSING_REASON =
+    "Roadmap generation migration not applied (0004_roadmap_atomic.sql).";
+
+interface SupabaseRpcErrorLike {
+    code?: string | null;
+    message?: string | null;
+    details?: string | null;
+    hint?: string | null;
+}
+
+function isMissingGenerateRoadmapRpc(error: SupabaseRpcErrorLike): boolean {
+    const message =
+        `${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`.toLowerCase();
+    if (error.code === "42883") {
+        return true;
+    }
+    return message.includes("generate_roadmap_v1") && message.includes("does not exist");
+}
+
+function extractRoadmapIdFromRpc(data: unknown): string | null {
+    if (typeof data === "string") {
+        return data;
+    }
+
+    if (Array.isArray(data) && data.length > 0) {
+        const first = data[0];
+        if (typeof first === "string") {
+            return first;
+        }
+        if (first && typeof first === "object") {
+            const firstValue = Object.values(first as Record<string, unknown>)[0];
+            return typeof firstValue === "string" ? firstValue : null;
+        }
+    }
+
+    if (data && typeof data === "object") {
+        const firstValue = Object.values(data as Record<string, unknown>)[0];
+        return typeof firstValue === "string" ? firstValue : null;
+    }
+
+    return null;
+}
+
 export async function POST(request: NextRequest) {
     try {
         const { userId, supabase } = await requireAuth();
@@ -82,84 +127,70 @@ export async function POST(request: NextRequest) {
 
         const { roadmapTitle, summary, nodes } = llmResult.data;
 
-        // 3. Determine next version
-        const { data: existingRoadmaps } = await supabase
-            .from("roadmaps")
-            .select("id, version, status")
-            .eq("goal_id", body.goalId)
-            .order("version", { ascending: false })
-            .limit(1);
-
-        const nextVersion = existingRoadmaps?.length
-            ? (existingRoadmaps[0].version as number) + 1
-            : 1;
-
-        // 4. Supersede previous active roadmap
-        if (existingRoadmaps?.length && existingRoadmaps[0].status === "active") {
-            await supabase
-                .from("roadmaps")
-                .update({ status: "superseded" })
-                .eq("id", existingRoadmaps[0].id);
-        }
-
-        // 5. Insert new roadmap
-        const { data: roadmap, error: roadmapError } = await supabase
-            .from("roadmaps")
-            .insert({
-                goal_id: body.goalId,
-                version: nextVersion,
-                status: "active",
-                generated_by: llmResult.meta.model,
-                regeneration_reason: body.regenerationReason ?? null,
-                roadmap_meta: {
+        // 3. Persist atomically inside DB transaction (roadmap + nodes + status transitions)
+        const { data: rpcData, error: rpcError } = await supabase.rpc(
+            "generate_roadmap_v1",
+            {
+                p_goal_id: body.goalId,
+                p_regeneration_reason: body.regenerationReason ?? null,
+                p_generated_by: llmResult.meta.model,
+                p_roadmap_meta: {
                     nodeCount: nodes.length,
                     roadmapTitle,
                     summary,
                     promptVersion: PROMPT_VERSION,
                 },
-            })
-            .select("id")
-            .single();
+                p_nodes: nodes,
+            }
+        );
 
-        if (roadmapError || !roadmap) {
-            console.error("[roadmap/generate] roadmap insert error:", roadmapError);
+        if (rpcError) {
+            if (isMissingGenerateRoadmapRpc(rpcError)) {
+                return NextResponse.json(
+                    { error: ROADMAP_MIGRATION_MISSING_REASON },
+                    { status: 503 }
+                );
+            }
+
+            if (rpcError.code === "23505") {
+                return NextResponse.json(
+                    { error: "Roadmap generation conflict. Please retry." },
+                    { status: 409 }
+                );
+            }
+
+            if (rpcError.code === "22023") {
+                return NextResponse.json(
+                    { error: "Roadmap payload is invalid." },
+                    { status: 400 }
+                );
+            }
+
+            if (rpcError.code === "42501") {
+                return NextResponse.json(
+                    { error: "Goal not found" },
+                    { status: 404 }
+                );
+            }
+
+            console.error("[roadmap/generate] generate_roadmap_v1 rpc error:", rpcError);
+            return NextResponse.json(
+                { error: "Failed to create roadmap" },
+                { status: 503 }
+            );
+        }
+
+        const roadmapId = extractRoadmapIdFromRpc(rpcData);
+        if (!roadmapId) {
+            console.error("[roadmap/generate] RPC returned invalid roadmap id:", rpcData);
             return NextResponse.json(
                 { error: "Failed to create roadmap" },
                 { status: 500 }
             );
         }
 
-        // 6. Insert roadmap nodes
-        const nodeRows = nodes.map((node, index) => ({
-            roadmap_id: roadmap.id,
-            sort_order: index + 1,
-            title: node.title,
-            description: node.description,
-            node_type: node.nodeType,
-            est_minutes: node.estMinutes,
-            skills: node.skills,
-            pass_rules: node.passRules,
-            content: {},
-            prerequisites: [],
-            status: index === 0 ? "active" : "locked",
-        }));
-
-        const { error: nodesError } = await supabase
-            .from("roadmap_nodes")
-            .insert(nodeRows);
-
-        if (nodesError) {
-            console.error("[roadmap/generate] nodes insert error:", nodesError);
-            // Clean up the roadmap if nodes failed
-            await supabase.from("roadmaps").delete().eq("id", roadmap.id);
-            return NextResponse.json(
-                { error: "Failed to create roadmap nodes" },
-                { status: 500 }
-            );
-        }
-
         return NextResponse.json(
-            { roadmapId: roadmap.id },
+            { roadmapId },
             { status: 201 }
         );
     } catch (err) {
@@ -178,11 +209,23 @@ export async function POST(request: NextRequest) {
         if (err instanceof LLMError) {
             // Map LLM errors to safe external messages
             const status = err.httpStatus;
+            if (
+                status === 503 &&
+                err.message.includes("0002_usage_rpc.sql")
+            ) {
+                return NextResponse.json(
+                    { error: USAGE_MIGRATION_MISSING_REASON },
+                    { status: 503 }
+                );
+            }
+
             const safeMessage =
                 status === 429
                     ? "Rate limit exceeded. Please try again later."
                     : status === 403
                         ? "Usage limit exceeded."
+                        : status === 503 && err.message === "Rate limit backend misconfigured."
+                            ? "Rate limit backend misconfigured."
                         : "LLM provider unavailable. Please try again later.";
             return NextResponse.json(
                 { error: safeMessage },

@@ -56,20 +56,39 @@ export default function RoadmapPage() {
 
     useEffect(() => {
         async function loadRoadmap() {
+            let shouldStopLoading = true;
             try {
                 const res = await fetch(`/api/roadmap/${roadmapId}`);
                 if (res.status === 401) {
-                    router.push(`/${locale}/login`);
+                    shouldStopLoading = false;
+                    router.replace(`/${locale}/login`);
                     return;
                 }
-                if (!res.ok) throw new Error("Failed to load roadmap");
+
+                if (res.status === 403) {
+                    setError(t("forbidden"));
+                    return;
+                }
+
+                if (res.status === 404) {
+                    setError(t("notFound"));
+                    return;
+                }
+
+                if (!res.ok) {
+                    setError(t("loadError"));
+                    return;
+                }
+
                 const data = await res.json();
                 setRoadmap(data.roadmap);
                 setNodes(data.nodes);
             } catch {
                 setError(t("loadError"));
             } finally {
-                setLoading(false);
+                if (shouldStopLoading) {
+                    setLoading(false);
+                }
             }
         }
 

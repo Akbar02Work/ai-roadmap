@@ -30,11 +30,20 @@ export async function GET() {
         let roadmaps: unknown[] = [];
 
         if (goalIds.length > 0) {
-            const { data: roadmapData } = await supabase
+            const { data: roadmapData, error: roadmapsError } = await supabase
                 .from("roadmaps")
-                .select("id, goal_id, status, version, roadmap_meta")
+                .select("id, goal_id, status, version, roadmap_meta, created_at")
                 .in("goal_id", goalIds)
-                .eq("status", "active");
+                .eq("status", "active")
+                .order("created_at", { ascending: false });
+
+            if (roadmapsError) {
+                console.error("[dashboard] roadmaps query error:", roadmapsError);
+                return NextResponse.json(
+                    { error: "Failed to fetch roadmaps" },
+                    { status: 500 }
+                );
+            }
 
             roadmaps = roadmapData ?? [];
         }
