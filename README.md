@@ -44,13 +44,18 @@ Apply migrations in this exact order after the base schema exists:
 3. `supabase/migrations/0003_profiles_trigger.sql` - adds signup profile auto-create trigger, backfills missing profiles, and adds `profiles_insert_own` hardening policy.
 4. `supabase/migrations/0004_roadmap_atomic.sql` - adds atomic roadmap generation RPC with per-goal serialization.
 5. `supabase/migrations/0005_roadmap_idempotency.sql` - adds roadmap generation idempotency `(goal_id, idempotency_key)` and dedupe returns.
+6. `supabase/migrations/0006_node_progress_rpc.sql` - adds node completion RPC for status transitions.
+7. `supabase/migrations/0007_node_progress_hardening.sql` - hardens node progress RPC + enforces single active node per roadmap.
 
 Recommended apply methods:
 
-1. Supabase SQL Editor: run each migration file in order (`0001` -> `0002` -> `0003` -> `0004` -> `0005`).
+1. Supabase SQL Editor: run each migration file in order (`0001` -> `0002` -> `0003` -> `0004` -> `0005` -> `0006` -> `0007`).
 2. Supabase CLI (if configured): `supabase db push` from the project root.
 
-`0003`, `0004`, and `0005` are mandatory for onboarding-to-roadmap flow. Without them, user profile invariants and roadmap generation guarantees (atomicity + idempotency) are not enforced.
+`0003` through `0007` are mandatory for onboarding-to-progress flow:
+- `0003`: signup/profile invariants.
+- `0004` + `0005`: roadmap atomicity and idempotent generation.
+- `0006` + `0007`: safe node status transitions and single-active-node integrity.
 
 ### Roadmap Generate Idempotency Contract
 
@@ -73,7 +78,7 @@ Why: protects against duplicate clicks, retries, and parallel tabs creating extr
 
 Before promoting to staging/production, verify all items:
 
-1. Migrations applied in order: `0001_rls.sql` -> `0002_usage_rpc.sql` -> `0003_profiles_trigger.sql` -> `0004_roadmap_atomic.sql` -> `0005_roadmap_idempotency.sql`.
+1. Migrations applied in order: `0001_rls.sql` -> `0002_usage_rpc.sql` -> `0003_profiles_trigger.sql` -> `0004_roadmap_atomic.sql` -> `0005_roadmap_idempotency.sql` -> `0006_node_progress_rpc.sql` -> `0007_node_progress_hardening.sql`.
 2. Supabase env is set:
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`

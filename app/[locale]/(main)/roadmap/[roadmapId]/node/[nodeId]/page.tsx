@@ -44,6 +44,15 @@ export default function NodePage() {
         correct: number;
         total: number;
     } | null>(null);
+    const roadmapPath = `/${locale}/roadmap/${roadmapId}`;
+
+    function goToRoadmap() {
+        router.push(roadmapPath);
+        // Ensure destination route reloads fresh statuses after attempt submit.
+        setTimeout(() => {
+            router.refresh();
+        }, 0);
+    }
 
     // Load node
     useEffect(() => {
@@ -54,7 +63,7 @@ export default function NodePage() {
                     router.replace(`/${locale}/login`);
                     return;
                 }
-                if (!res.ok) throw new Error("Failed to load");
+                if (!res.ok) throw new Error(t("loadError"));
                 const data = await res.json();
                 setNode(data.node);
 
@@ -83,7 +92,7 @@ export default function NodePage() {
             });
             if (!res.ok) {
                 const data = await res.json();
-                throw new Error(data.error ?? "Failed to generate quiz");
+                throw new Error(data.error ?? t("generateError"));
             }
             const data = await res.json();
             const questions = data.quiz.questions;
@@ -111,7 +120,7 @@ export default function NodePage() {
             });
             if (!res.ok) {
                 const data = await res.json();
-                throw new Error(data.error ?? "Failed to submit");
+                throw new Error(data.error ?? t("submitError"));
             }
             const data = await res.json();
             setResult(data);
@@ -149,9 +158,7 @@ export default function NodePage() {
             {/* Header */}
             <div className="mb-6">
                 <button
-                    onClick={() =>
-                        router.push(`/${locale}/roadmap/${roadmapId}`)
-                    }
+                    onClick={goToRoadmap}
                     className="mb-4 text-sm text-muted-foreground transition hover:text-foreground"
                 >
                     ← {t("backToRoadmap")}
@@ -194,9 +201,7 @@ export default function NodePage() {
                         })}
                     </p>
                     <button
-                        onClick={() =>
-                            router.push(`/${locale}/roadmap/${roadmapId}`)
-                        }
+                        onClick={goToRoadmap}
                         className="mt-4 rounded-xl bg-primary px-6 py-3 text-sm font-medium text-primary-foreground transition hover:opacity-90"
                     >
                         {t("backToRoadmap")}
