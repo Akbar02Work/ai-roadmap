@@ -2,6 +2,10 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocale, useTranslations } from "next-intl";
+import {
+    clearRoadmapIdempotencyKey,
+    getOrCreateRoadmapIdempotencyKey,
+} from "@/lib/roadmap/idempotency";
 
 // --- Types ---
 
@@ -549,6 +553,7 @@ export default function OnboardingPage() {
                                     if (!goalId || generatingRoadmap) return;
                                     setGeneratingRoadmap(true);
                                     try {
+                                        const idempotencyKey = getOrCreateRoadmapIdempotencyKey(goalId);
                                         const res = await fetch(
                                             "/api/roadmap/generate",
                                             {
@@ -559,6 +564,7 @@ export default function OnboardingPage() {
                                                 },
                                                 body: JSON.stringify({
                                                     goalId,
+                                                    idempotencyKey,
                                                 }),
                                             }
                                         );
@@ -567,6 +573,9 @@ export default function OnboardingPage() {
                                                 "Failed to generate"
                                             );
                                         const data = await res.json();
+                                        if (res.status === 200 || res.status === 201) {
+                                            clearRoadmapIdempotencyKey(goalId);
+                                        }
                                         window.location.href = `/${locale}/roadmap/${data.roadmapId}`;
                                     } catch {
                                         setError(

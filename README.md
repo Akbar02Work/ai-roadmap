@@ -42,19 +42,38 @@ Apply migrations in this exact order after the base schema exists:
 1. `supabase/migrations/0001_rls.sql` - enables RLS and owner-scoped policies.
 2. `supabase/migrations/0002_usage_rpc.sql` - adds `consume_usage_v1` RPC for atomic usage enforcement.
 3. `supabase/migrations/0003_profiles_trigger.sql` - adds signup profile auto-create trigger, backfills missing profiles, and adds `profiles_insert_own` hardening policy.
+4. `supabase/migrations/0004_roadmap_atomic.sql` - adds atomic roadmap generation RPC with per-goal serialization.
+5. `supabase/migrations/0005_roadmap_idempotency.sql` - adds roadmap generation idempotency `(goal_id, idempotency_key)` and dedupe returns.
 
 Recommended apply methods:
 
-1. Supabase SQL Editor: run each migration file in order (`0001` then `0002` then `0003`).
+1. Supabase SQL Editor: run each migration file in order (`0001` -> `0002` -> `0003` -> `0004` -> `0005`).
 2. Supabase CLI (if configured): `supabase db push` from the project root.
 
-`0003` is mandatory. Without it, new auth users may not get a `public.profiles` row at signup, which breaks the app's user-data invariant and can cause RLS-protected profile flows to fail.
+`0003`, `0004`, and `0005` are mandatory for onboarding-to-roadmap flow. Without them, user profile invariants and roadmap generation guarantees (atomicity + idempotency) are not enforced.
+
+### Roadmap Generate Idempotency Contract
+
+`POST /api/roadmap/generate` accepts:
+
+```json
+{
+  "goalId": "uuid",
+  "idempotencyKey": "uuid (optional)"
+}
+```
+
+Response contract:
+- `201` for a new roadmap: `{ roadmapId, deduped: false, idempotencyKey }`
+- `200` for replay with the same `(goalId, idempotencyKey)`: `{ roadmapId, deduped: true, idempotencyKey }`
+
+Why: protects against duplicate clicks, retries, and parallel tabs creating extra roadmap versions.
 
 ## Staging Checklist
 
 Before promoting to staging/production, verify all items:
 
-1. Migrations applied in order: `0001_rls.sql` -> `0002_usage_rpc.sql` -> `0003_profiles_trigger.sql`.
+1. Migrations applied in order: `0001_rls.sql` -> `0002_usage_rpc.sql` -> `0003_profiles_trigger.sql` -> `0004_roadmap_atomic.sql` -> `0005_roadmap_idempotency.sql`.
 2. Supabase env is set:
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`

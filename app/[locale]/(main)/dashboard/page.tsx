@@ -3,6 +3,10 @@
 import { useState, useEffect } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
+import {
+    clearRoadmapIdempotencyKey,
+    getOrCreateRoadmapIdempotencyKey,
+} from "@/lib/roadmap/idempotency";
 
 interface GoalRow {
     id: string;
@@ -57,13 +61,17 @@ export default function DashboardPage() {
     async function handleGenerate(goalId: string) {
         setGenerating(goalId);
         try {
+            const idempotencyKey = getOrCreateRoadmapIdempotencyKey(goalId);
             const res = await fetch("/api/roadmap/generate", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ goalId }),
+                body: JSON.stringify({ goalId, idempotencyKey }),
             });
             if (!res.ok) throw new Error("Failed to generate");
             const data = await res.json();
+            if (res.status === 200 || res.status === 201) {
+                clearRoadmapIdempotencyKey(goalId);
+            }
             router.push(`/${locale}/roadmap/${data.roadmapId}`);
         } catch {
             setGenerating(null);
