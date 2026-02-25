@@ -94,3 +94,22 @@ Before promoting to staging/production, verify all items:
    - login/signup callback works (`/api/auth/callback`)
    - new signup gets `public.profiles` row
    - authenticated onboarding routes can read/write user-scoped data under RLS
+
+## Phase 5 Manual Test (Node Completion Rules)
+
+Preconditions:
+- Migrations `0006_node_progress_rpc.sql` and `0007_node_progress_hardening.sql` are applied.
+- User has an active roadmap with an active node.
+
+Steps:
+1. Open dashboard -> `View Roadmap` -> open active node -> click `Generate quiz`.
+2. Answer only 2/5 questions:
+   - Submit button must stay disabled in UI (`Answered X/Y` is below total), or
+   - if request is forced manually, API returns `400` with "All quiz questions must be answered before submitting."
+3. Answer all questions but with 3/5 correct:
+   - response should be `passed: false` (threshold is `70%`),
+   - node must remain not completed.
+4. Answer all questions with 4/5 correct:
+   - response should be `passed: true`,
+   - current node becomes `completed`,
+   - next node becomes `active`.
