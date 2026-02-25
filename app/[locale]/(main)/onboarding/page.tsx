@@ -2,6 +2,10 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocale, useTranslations } from "next-intl";
+import {
+    clearRoadmapIdempotencyKey,
+    getOrCreateRoadmapIdempotencyKey,
+} from "@/lib/roadmap/idempotency";
 
 // --- Types ---
 
@@ -56,6 +60,7 @@ export default function OnboardingPage() {
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [generatingRoadmap, setGeneratingRoadmap] = useState(false);
 
     // Diagnostic state
     const [questions, setQuestions] = useState<DiagnosticQuestion[]>([]);
@@ -313,8 +318,8 @@ export default function OnboardingPage() {
                                     >
                                         <div
                                             className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm ${msg.role === "user"
-                                                    ? "bg-primary text-primary-foreground"
-                                                    : "bg-muted text-foreground"
+                                                ? "bg-primary text-primary-foreground"
+                                                : "bg-muted text-foreground"
                                                 }`}
                                         >
                                             {msg.content}
@@ -439,9 +444,9 @@ export default function OnboardingPage() {
                                                     );
                                                 }}
                                                 className={`w-full rounded-xl border px-4 py-3 text-left text-sm transition ${answers[currentQ] ===
-                                                        opt
-                                                        ? "border-primary bg-primary/10 font-medium"
-                                                        : "border-border hover:border-primary/50"
+                                                    opt
+                                                    ? "border-primary bg-primary/10 font-medium"
+                                                    : "border-border hover:border-primary/50"
                                                     }`}
                                             >
                                                 {opt}
@@ -543,11 +548,49 @@ export default function OnboardingPage() {
                                     </h2>
                                 </>
                             )}
-                            <div className="rounded-2xl bg-muted/50 p-6">
-                                <p className="text-muted-foreground">
-                                    {t("phase4Placeholder")}
-                                </p>
-                            </div>
+                            <button
+                                onClick={async () => {
+                                    if (!goalId || generatingRoadmap) return;
+                                    setGeneratingRoadmap(true);
+                                    try {
+                                        const idempotencyKey = getOrCreateRoadmapIdempotencyKey(goalId);
+                                        const res = await fetch(
+                                            "/api/roadmap/generate",
+                                            {
+                                                method: "POST",
+                                                headers: {
+                                                    "Content-Type":
+                                                        "application/json",
+                                                },
+                                                body: JSON.stringify({
+                                                    goalId,
+                                                    idempotencyKey,
+                                                }),
+                                            }
+                                        );
+                                        if (!res.ok)
+                                            throw new Error(
+                                                "Failed to generate"
+                                            );
+                                        const data = await res.json();
+                                        if (res.status === 200 || res.status === 201) {
+                                            clearRoadmapIdempotencyKey(goalId);
+                                        }
+                                        window.location.href = `/${locale}/roadmap/${data.roadmapId}`;
+                                    } catch {
+                                        setError(
+                                            t("generateError")
+                                        );
+                                        setGeneratingRoadmap(false);
+                                    }
+                                }}
+                                disabled={!goalId || generatingRoadmap}
+                                className="w-full rounded-xl bg-primary px-6 py-3 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-50"
+                            >
+                                {generatingRoadmap
+                                    ? t("generating")
+                                    : t("generateRoadmap")}
+                            </button>
                         </div>
                     </div>
                 )}

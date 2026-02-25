@@ -1,6 +1,7 @@
 // ============================================================
 // Prompt: Roadmap Generation v1
 // Generates a structured learning roadmap from goal + diagnosis.
+// Returns JSON matching RoadmapOutputSchema.
 // ============================================================
 
 import type { LLMMessage, Locale } from "@/lib/llm/types";
@@ -31,23 +32,30 @@ export function buildPrompt(
                 `You are an expert curriculum designer for personalized learning.`,
                 `Create a step-by-step learning roadmap in ${lang}.`,
                 ``,
-                `Respond ONLY with valid JSON:`,
+                `Respond ONLY with valid JSON matching this exact schema:`,
                 `{`,
-                `  "title": "<string>",`,
-                `  "estimatedWeeks": <number>,`,
+                `  "roadmapTitle": "<string>",`,
+                `  "summary": "<1-2 sentence overview of the roadmap>",`,
                 `  "nodes": [`,
                 `    {`,
-                `      "sortOrder": <number>,`,
                 `      "title": "<string>",`,
                 `      "description": "<string>",`,
-                `      "nodeType": "lesson" | "quiz" | "practice" | "review",`,
-                `      "estMinutes": <number>,`,
-                `      "skills": ["<string>", ...]`,
+                `      "nodeType": "lesson" | "practice" | "review" | "quiz",`,
+                `      "estMinutes": <number 5-120>,`,
+                `      "skills": ["<string>", ...],`,
+                `      "passRules": { "minScore": <0-1>, "requireReport": <boolean> }`,
                 `    }`,
                 `  ]`,
                 `}`,
-                `Create 8-15 nodes. Mix lessons, quizzes, and practice sessions.`,
-                `Ensure progression from current level to target.`,
+                ``,
+                `Rules:`,
+                `- Create 8-15 nodes. Mix lessons (60%), practice (20%), quizzes (15%), and reviews (5%).`,
+                `- Ensure a natural progression from the user's current level to their target.`,
+                `- For quizzes: set minScore to 0.7 and requireReport to false.`,
+                `- For lessons: set minScore to 0 and requireReport to false.`,
+                `- For practice: set minScore to 0.5 and requireReport to true.`,
+                `- Adapt time per node to the user's available schedule.`,
+                `- Each skill tag should be concise (e.g. "vocabulary", "grammar basics", "reading comprehension").`,
             ].join("\n"),
         },
         {
