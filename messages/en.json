@@ -58,7 +58,9 @@
         "diagnosticSubmitError": "Failed to submit diagnostic",
         "completeTitle": "Onboarding complete!",
         "answerPlaceholder": "Type your answer...",
-        "questionOf": "Question {current} of {total}"
+        "questionOf": "Question {current} of {total}",
+        "generateRoadmap": "Generate Roadmap",
+        "generateError": "Failed to generate roadmap. Please try again."
     },
     "auth": {
         "emailPlaceholder": "Email",
@@ -85,15 +87,23 @@
         "activeGoals": "Active Goals",
         "streak": "Day Streak",
         "noGoals": "No active goals yet. Start by creating one!",
-        "createGoal": "Create New Goal"
+        "createGoal": "Create New Goal",
+        "viewRoadmap": "View Roadmap",
+        "generateRoadmap": "Generate Roadmap",
+        "needsDiagnosis": "Complete onboarding first to generate a roadmap"
     },
     "roadmap": {
         "title": "Your Roadmap",
         "progress": "Progress",
+        "totalTime": "Total",
         "completed": "Completed",
         "locked": "Locked",
         "active": "Active",
-        "startLesson": "Start Lesson"
+        "skipped": "Skipped",
+        "startLesson": "Start Lesson",
+        "loading": "Loading roadmap...",
+        "loadError": "Failed to load roadmap",
+        "notFound": "Roadmap not found"
     },
     "quiz": {
         "title": "Quiz",

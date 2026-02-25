@@ -58,7 +58,9 @@
         "diagnosticSubmitError": "Не удалось отправить диагностику",
         "completeTitle": "Онбординг завершён!",
         "answerPlaceholder": "Введите ваш ответ...",
-        "questionOf": "Вопрос {current} из {total}"
+        "questionOf": "Вопрос {current} из {total}",
+        "generateRoadmap": "Сгенерировать роадмап",
+        "generateError": "Не удалось сгенерировать роадмап. Попробуйте ещё раз."
     },
     "auth": {
         "emailPlaceholder": "Email",
@@ -85,15 +87,23 @@
         "activeGoals": "Активные цели",
         "streak": "Дней подряд",
         "noGoals": "Пока нет активных целей. Начните с создания новой!",
-        "createGoal": "Создать новую цель"
+        "createGoal": "Создать новую цель",
+        "viewRoadmap": "Открыть роадмап",
+        "generateRoadmap": "Сгенерировать роадмап",
+        "needsDiagnosis": "Сначала пройдите онбординг для генерации роадмапа"
     },
     "roadmap": {
         "title": "Ваш роадмап",
         "progress": "Прогресс",
+        "totalTime": "Всего",
         "completed": "Завершено",
         "locked": "Заблокировано",
         "active": "Активно",
-        "startLesson": "Начать урок"
+        "skipped": "Пропущено",
+        "startLesson": "Начать урок",
+        "loading": "Загрузка роадмапа...",
+        "loadError": "Не удалось загрузить роадмап",
+        "notFound": "Роадмап не найден"
     },
     "quiz": {
         "title": "Тест",
