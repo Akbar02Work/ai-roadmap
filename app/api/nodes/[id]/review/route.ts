@@ -17,10 +17,16 @@ interface SupabaseRpcErrorLike {
     details?: string | null;
 }
 
-function isMissingRpc(error: SupabaseRpcErrorLike): boolean {
-    if (error.code === "42883") return true;
+function isMissingReviewMigration(error: SupabaseRpcErrorLike): boolean {
+    if (error.code === "42883" || error.code === "42703") return true;
     const msg = `${error.message ?? ""} ${error.details ?? ""}`.toLowerCase();
-    return msg.includes("review_node_v1") && msg.includes("does not exist");
+    return (
+        (msg.includes("review_node_v1") && msg.includes("does not exist")) ||
+        (msg.includes("next_review_at") && msg.includes("does not exist")) ||
+        (msg.includes("last_review_at") && msg.includes("does not exist")) ||
+        (msg.includes("review_interval_days") && msg.includes("does not exist")) ||
+        (msg.includes("review_count") && msg.includes("does not exist"))
+    );
 }
 
 export async function POST(
@@ -43,7 +49,7 @@ export async function POST(
         );
 
         if (rpcError) {
-            if (isMissingRpc(rpcError)) {
+            if (isMissingReviewMigration(rpcError)) {
                 return NextResponse.json(
                     { error: "Review migration not applied (0009_reviews_srs.sql)." },
                     { status: 503 }
@@ -57,13 +63,13 @@ export async function POST(
             }
             if (rpcError.code === "22023") {
                 return NextResponse.json(
-                    { error: rpcError.message ?? "Only completed nodes can be reviewed" },
+                    { error: "Only completed nodes can be reviewed" },
                     { status: 400 }
                 );
             }
             console.error("[nodes/[id]/review] rpc error:", rpcError);
             return NextResponse.json(
-                { error: "Failed to submit review" },
+                { error: "Review unavailable." },
                 { status: 503 }
             );
         }

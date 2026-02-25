@@ -40,6 +40,8 @@ export async function GET(request: NextRequest) {
             .not("next_review_at", "is", null)
             .lte("next_review_at", new Date().toISOString())
             .order("next_review_at", { ascending: true })
+            .order("sort_order", { ascending: true })
+            .order("id", { ascending: true })
             .limit(10);
 
         if (nodesError) {
