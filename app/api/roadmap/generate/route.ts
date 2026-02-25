@@ -4,6 +4,7 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import { z } from "zod/v4";
 import { requireAuth, AuthError } from "@/lib/auth";
 import { callLLMStructured, LLMError } from "@/lib/llm";
@@ -16,6 +17,7 @@ import type { Locale } from "@/lib/llm/types";
 
 const RequestBodySchema = z.object({
     goalId: z.string().uuid(),
+    idempotencyKey: z.string().uuid().optional(),
     regenerationReason: z.string().optional(),
 });
 
@@ -23,6 +25,8 @@ const USAGE_MIGRATION_MISSING_REASON =
     "Usage enforcement migration not applied (0002_usage_rpc.sql).";
 const ROADMAP_MIGRATION_MISSING_REASON =
     "Roadmap generation migration not applied (0004_roadmap_atomic.sql).";
+const ROADMAP_IDEMPOTENCY_MIGRATION_MISSING_REASON =
+    "Roadmap idempotency migration not applied (0005_roadmap_idempotency.sql).";
 
 interface SupabaseRpcErrorLike {
     code?: string | null;
@@ -40,28 +44,47 @@ function isMissingGenerateRoadmapRpc(error: SupabaseRpcErrorLike): boolean {
     return message.includes("generate_roadmap_v1") && message.includes("does not exist");
 }
 
-function extractRoadmapIdFromRpc(data: unknown): string | null {
-    if (typeof data === "string") {
-        return data;
+function isMissingRoadmapIdempotencyUpgrade(
+    error: SupabaseRpcErrorLike
+): boolean {
+    const message =
+        `${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`
+            .toLowerCase()
+            .replace(/\s+/g, "");
+    return message.includes("generate_roadmap_v1(uuid,text,text,jsonb,jsonb,uuid)");
+}
+
+interface GenerateRoadmapRpcRow {
+    roadmap_id?: unknown;
+    deduped?: unknown;
+}
+
+function extractGenerateRoadmapResult(data: unknown): {
+    roadmapId: string;
+    deduped: boolean;
+} | null {
+    const firstRow = Array.isArray(data) ? data[0] : data;
+    if (!firstRow || typeof firstRow !== "object") {
+        return null;
     }
 
-    if (Array.isArray(data) && data.length > 0) {
-        const first = data[0];
-        if (typeof first === "string") {
-            return first;
-        }
-        if (first && typeof first === "object") {
-            const firstValue = Object.values(first as Record<string, unknown>)[0];
-            return typeof firstValue === "string" ? firstValue : null;
-        }
+    const row = firstRow as GenerateRoadmapRpcRow;
+    const roadmapId =
+        typeof row.roadmap_id === "string" ? row.roadmap_id : null;
+    const deduped =
+        typeof row.deduped === "boolean"
+            ? row.deduped
+            : row.deduped === "t"
+                ? true
+                : row.deduped === "f"
+                    ? false
+                    : null;
+
+    if (!roadmapId || deduped === null) {
+        return null;
     }
 
-    if (data && typeof data === "object") {
-        const firstValue = Object.values(data as Record<string, unknown>)[0];
-        return typeof firstValue === "string" ? firstValue : null;
-    }
-
-    return null;
+    return { roadmapId, deduped };
 }
 
 export async function POST(request: NextRequest) {
@@ -70,6 +93,7 @@ export async function POST(request: NextRequest) {
 
         const raw = await request.json();
         const body = RequestBodySchema.parse(raw);
+        const idempotencyKey = body.idempotencyKey ?? randomUUID();
 
         // 1. Load goal (RLS ensures ownership)
         const { data: goal, error: goalError } = await supabase
@@ -141,13 +165,17 @@ export async function POST(request: NextRequest) {
                     promptVersion: PROMPT_VERSION,
                 },
                 p_nodes: nodes,
+                p_idempotency_key: idempotencyKey,
             }
         );
 
         if (rpcError) {
             if (isMissingGenerateRoadmapRpc(rpcError)) {
+                const migrationReason = isMissingRoadmapIdempotencyUpgrade(rpcError)
+                    ? ROADMAP_IDEMPOTENCY_MIGRATION_MISSING_REASON
+                    : ROADMAP_MIGRATION_MISSING_REASON;
                 return NextResponse.json(
-                    { error: ROADMAP_MIGRATION_MISSING_REASON },
+                    { error: migrationReason },
                     { status: 503 }
                 );
             }
@@ -180,9 +208,9 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const roadmapId = extractRoadmapIdFromRpc(rpcData);
-        if (!roadmapId) {
-            console.error("[roadmap/generate] RPC returned invalid roadmap id:", rpcData);
+        const result = extractGenerateRoadmapResult(rpcData);
+        if (!result) {
+            console.error("[roadmap/generate] RPC returned invalid roadmap result:", rpcData);
             return NextResponse.json(
                 { error: "Failed to create roadmap" },
                 { status: 500 }
@@ -190,8 +218,12 @@ export async function POST(request: NextRequest) {
         }
 
         return NextResponse.json(
-            { roadmapId },
-            { status: 201 }
+            {
+                roadmapId: result.roadmapId,
+                deduped: result.deduped,
+                idempotencyKey,
+            },
+            { status: result.deduped ? 200 : 201 }
         );
     } catch (err) {
         if (err instanceof AuthError) {
