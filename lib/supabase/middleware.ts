@@ -11,6 +11,18 @@ function serviceUnavailableResponse() {
     });
 }
 
+function isAuthSessionMissingError(error: unknown) {
+    if (!error || typeof error !== "object") {
+        return false;
+    }
+
+    const maybeError = error as { name?: unknown; message?: unknown };
+    return (
+        maybeError.name === "AuthSessionMissingError" ||
+        maybeError.message === "Auth session missing!"
+    );
+}
+
 export async function updateSession(request: NextRequest) {
     let env;
     try {
@@ -50,10 +62,23 @@ export async function updateSession(request: NextRequest) {
         }
     );
 
-    // Refresh the auth token
-    const { error } = await supabase.auth.getUser();
-    if (error) {
-        console.error("[supabase/middleware] Failed to refresh auth session:", error.message);
+    // Refresh auth token if session exists; anon requests are expected to have no session.
+    let refreshError: unknown = null;
+    try {
+        const { error } = await supabase.auth.getUser();
+        refreshError = error;
+    } catch (error) {
+        refreshError = error;
+    }
+
+    if (refreshError) {
+        if (isAuthSessionMissingError(refreshError)) {
+            return supabaseResponse;
+        }
+
+        const errorMessage =
+            refreshError instanceof Error ? refreshError.message : String(refreshError);
+        console.error("[supabase/middleware] Failed to refresh auth session:", errorMessage);
         return serviceUnavailableResponse();
     }
 
