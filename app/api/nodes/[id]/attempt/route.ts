@@ -9,9 +9,10 @@ import { requireAuth, AuthError } from "@/lib/auth";
 import { QuizOutputSchema } from "@/lib/schemas/quiz";
 
 const AttemptBodySchema = z.object({
-    answers: z.array(z.number().int().min(0)),
+    answers: z.array(z.union([z.number().int().min(0), z.null()])),
     report: z.string().max(2000),
 });
+const PASS_THRESHOLD = 0.7;
 
 const NODE_PROGRESS_MIGRATION_MISSING_REASON =
     "Node progress migration not applied (0006_node_progress_rpc.sql, 0007_node_progress_hardening.sql).";
@@ -47,7 +48,7 @@ export async function POST(
         // 1. Load node with quiz from content
         const { data: node, error: nodeError } = await supabase
             .from("roadmap_nodes")
-            .select("id, content, pass_rules, status")
+            .select("id, content, status")
             .eq("id", nodeId)
             .single();
 
@@ -92,25 +93,37 @@ export async function POST(
                 { status: 400 }
             );
         }
+        const answeredAll = body.answers.every((answer) => typeof answer === "number");
+        if (!answeredAll) {
+            return NextResponse.json(
+                { error: "All quiz questions must be answered before submitting." },
+                { status: 400 }
+            );
+        }
 
         let correct = 0;
         for (let i = 0; i < totalQ; i++) {
-            if (body.answers[i] < 0 || body.answers[i] >= quiz.questions[i].options.length) {
+            const answer = body.answers[i];
+            if (typeof answer !== "number") {
+                return NextResponse.json(
+                    { error: `Missing answer at question ${i + 1}` },
+                    { status: 400 }
+                );
+            }
+            if (answer < 0 || answer >= quiz.questions[i].options.length) {
                 return NextResponse.json(
                     { error: `Answer index out of range at question ${i + 1}` },
                     { status: 400 }
                 );
             }
-            if (body.answers[i] === quiz.questions[i].correctIndex) {
+            if (answer === quiz.questions[i].correctIndex) {
                 correct++;
             }
         }
         const score = correct / totalQ;
 
         // 3. Determine pass/fail
-        const passRules = (node.pass_rules as Record<string, unknown>) ?? {};
-        const minScore = typeof passRules.minScore === "number" ? passRules.minScore : 0.7;
-        const passed = score >= minScore;
+        const passed = answeredAll && score >= PASS_THRESHOLD;
 
         // 4. If passed, complete node via RPC (fail-closed, no manual fallback).
         let nextNodeId: string | null = null;
@@ -168,13 +181,23 @@ export async function POST(
             );
         }
 
-        return NextResponse.json({
+        const responseBody: {
+            score: number;
+            passed: boolean;
+            correct: number;
+            total: number;
+            nextNodeId?: string | null;
+        } = {
             score,
             passed,
             correct,
             total: totalQ,
-            nextNodeId,
-        });
+        };
+        if (passed) {
+            responseBody.nextNodeId = nextNodeId;
+        }
+
+        return NextResponse.json(responseBody);
     } catch (err) {
         if (err instanceof AuthError) {
             return NextResponse.json(
