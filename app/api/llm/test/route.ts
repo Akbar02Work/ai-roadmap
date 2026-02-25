@@ -10,6 +10,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod/v4";
+import { requireAuth, AuthError } from "@/lib/auth";
 import { callLLMStructured, LLMError, checkRateLimit } from "@/lib/llm";
 import { QuizOutputSchema } from "@/lib/schemas/quiz";
 import {
@@ -24,65 +25,70 @@ const RequestBodySchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
-    // 0. Strict rate limit on this endpoint (expensive)
-    const ip =
-        request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-        "unknown-ip";
-    const rl = await checkRateLimit(ip, /* strict */ true);
-    if (!rl.allowed) {
-        const status = rl.statusCode ?? 429;
-        if (status === 503) {
+    try {
+        const { userId, supabase } = await requireAuth();
+
+        // 0. Strict rate limit on this endpoint (expensive)
+        const rl = await checkRateLimit(userId, /* strict */ true);
+        if (!rl.allowed) {
+            const status = rl.statusCode ?? 429;
+            if (status === 503) {
+                return NextResponse.json(
+                    { error: rl.reason ?? "Rate limit backend misconfigured." },
+                    { status: 503 }
+                );
+            }
             return NextResponse.json(
-                { error: rl.reason ?? "Rate limit backend misconfigured." },
-                { status: 503 }
+                {
+                    error: rl.reason ?? "Rate limit exceeded. Try again later.",
+                    retryAfterMs: rl.resetMs,
+                },
+                { status }
             );
         }
-        return NextResponse.json(
-            {
-                error: rl.reason ?? "Rate limit exceeded. Try again later.",
-                retryAfterMs: rl.resetMs,
-            },
-            { status }
-        );
-    }
 
-    // 1. Parse request body
-    let body: z.infer<typeof RequestBodySchema>;
-    try {
+        // 1. Parse request body
         const raw = await request.json();
-        body = RequestBodySchema.parse(raw);
-    } catch (err) {
-        const message =
-            err instanceof z.ZodError
-                ? `Validation error: ${err.issues.map((i) => i.message).join(", ")}`
-                : "Invalid JSON body";
-        return NextResponse.json({ error: message }, { status: 400 });
-    }
+        const body = RequestBodySchema.parse(raw);
 
-    const locale = body.locale ?? "en";
+        const locale = body.locale ?? "en";
 
-    // 2. Build prompt
-    const messages = buildPrompt(locale, {
-        topic: body.topic,
-        level: body.level,
-        numQuestions: 3,
-    });
+        // 2. Build prompt
+        const messages = buildPrompt(locale, {
+            topic: body.topic,
+            level: body.level,
+            numQuestions: 3,
+        });
 
-    // 3. Call LLM with structured output
-    try {
+        // 3. Call LLM with structured output
         const result = await callLLMStructured(
             {
                 task: "quiz_generation",
                 locale,
+                userId,
                 promptVersion: PROMPT_VERSION,
                 messages,
-                // No userId — this is a test endpoint (anonymous)
             },
-            QuizOutputSchema
+            QuizOutputSchema,
+            { userId, supabase }
         );
 
         return NextResponse.json(result, { status: 200 });
     } catch (err) {
+        if (err instanceof AuthError) {
+            return NextResponse.json(
+                { error: err.message },
+                { status: err.status }
+            );
+        }
+        if (err instanceof z.ZodError) {
+            return NextResponse.json(
+                {
+                    error: `Validation error: ${err.issues.map((i) => i.message).join(", ")}`,
+                },
+                { status: 400 }
+            );
+        }
         if (err instanceof LLMError) {
             return NextResponse.json(
                 { error: err.message, task: err.task },
@@ -90,19 +96,18 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // API key missing or other server error
-        const message =
-            err instanceof Error ? err.message : "Internal server error";
-        const isKeyMissing =
+        const message = err instanceof Error ? err.message : String(err);
+        const isProviderConfigError =
             message.includes("API_KEY") || message.includes("is not set");
+        console.error("[llm/test] unexpected error:", message);
 
         return NextResponse.json(
             {
-                error: isKeyMissing
-                    ? "LLM provider API key not configured. Set OPENAI_API_KEY and/or ANTHROPIC_API_KEY."
-                    : message,
+                error: isProviderConfigError
+                    ? "LLM provider configuration unavailable."
+                    : "LLM test request failed.",
             },
-            { status: isKeyMissing ? 503 : 500 }
+            { status: isProviderConfigError ? 503 : 500 }
         );
     }
 }

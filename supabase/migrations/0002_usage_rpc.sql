@@ -48,6 +48,7 @@ BEGIN
 END;
 $$;
 
+REVOKE ALL ON FUNCTION public.consume_usage_v1(integer, integer, integer, integer) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.consume_usage_v1(integer, integer, integer, integer) TO authenticated;
 
 COMMIT;

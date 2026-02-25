@@ -35,12 +35,38 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 
-## RLS Setup (Required Before Production)
+## Supabase Migrations (Required Before Staging/Production)
 
-Row Level Security policies are versioned in `supabase/migrations/0001_rls.sql`.
-Apply this SQL after the base schema exists:
+Apply migrations in this exact order after the base schema exists:
 
-1. Supabase SQL Editor: paste and run `supabase/migrations/0001_rls.sql`.
+1. `supabase/migrations/0001_rls.sql` - enables RLS and owner-scoped policies.
+2. `supabase/migrations/0002_usage_rpc.sql` - adds `consume_usage_v1` RPC for atomic usage enforcement.
+3. `supabase/migrations/0003_profiles_trigger.sql` - adds signup profile auto-create trigger, backfills missing profiles, and adds `profiles_insert_own` hardening policy.
+
+Recommended apply methods:
+
+1. Supabase SQL Editor: run each migration file in order (`0001` then `0002` then `0003`).
 2. Supabase CLI (if configured): `supabase db push` from the project root.
 
-RLS is a mandatory production step. Do not ship endpoints that read/write user data until these policies are applied in the target environment.
+`0003` is mandatory. Without it, new auth users may not get a `public.profiles` row at signup, which breaks the app's user-data invariant and can cause RLS-protected profile flows to fail.
+
+## Staging Checklist
+
+Before promoting to staging/production, verify all items:
+
+1. Migrations applied in order: `0001_rls.sql` -> `0002_usage_rpc.sql` -> `0003_profiles_trigger.sql`.
+2. Supabase env is set:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+3. LLM provider env is set for active routes:
+   - OpenAI path: `OPENAI_API_KEY`
+   - Anthropic fallback path: `ANTHROPIC_API_KEY`
+   - OpenRouter onboarding path: `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `OPENROUTER_REFERER`, `OPENROUTER_TITLE`
+4. Rate-limit backend configured for production:
+   - `UPSTASH_REDIS_REST_URL`
+   - `UPSTASH_REDIS_REST_TOKEN`
+   - (Without these, production rate-limited endpoints fail with `503`.)
+5. Auth flows verified:
+   - login/signup callback works (`/api/auth/callback`)
+   - new signup gets `public.profiles` row
+   - authenticated onboarding routes can read/write user-scoped data under RLS

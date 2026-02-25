@@ -40,6 +40,7 @@ export interface CallLLMInput {
     messages: LLMMessage[];
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type LLMDatabase = any;
 
 export interface CallLLMContext {
