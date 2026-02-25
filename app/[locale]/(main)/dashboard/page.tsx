@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import {
@@ -25,6 +25,20 @@ interface RoadmapRow {
     roadmap_meta: { roadmapTitle?: string; nodeCount?: number };
 }
 
+interface ProgressSummary {
+    todayMinutes: number;
+    weekMinutes: number;
+    streakCurrent: number;
+    streakBest: number;
+    series: Array<{ day: string; minutes: number; nodesCompleted: number }>;
+}
+
+interface DueReviewNode {
+    id: string;
+    title: string;
+    sort_order: number;
+}
+
 export default function DashboardPage() {
     const t = useTranslations("dashboard");
     const tCommon = useTranslations("common");
@@ -33,8 +47,35 @@ export default function DashboardPage() {
 
     const [goals, setGoals] = useState<GoalRow[]>([]);
     const [roadmaps, setRoadmaps] = useState<RoadmapRow[]>([]);
+    const [progress, setProgress] = useState<Record<string, ProgressSummary>>({});
+    const [dueReviews, setDueReviews] = useState<Record<string, DueReviewNode[]>>({});
     const [loading, setLoading] = useState(true);
     const [generating, setGenerating] = useState<string | null>(null);
+    const [logging, setLogging] = useState<string | null>(null);
+
+    const loadProgress = useCallback(async (goalId: string) => {
+        try {
+            const res = await fetch(`/api/progress/summary?goalId=${goalId}`);
+            if (res.ok) {
+                const data = await res.json();
+                setProgress((prev) => ({ ...prev, [goalId]: data }));
+            }
+        } catch {
+            // silent — progress API may not be available (migration missing)
+        }
+    }, []);
+
+    const loadDueReviews = useCallback(async (goalId: string) => {
+        try {
+            const res = await fetch(`/api/reviews/due?goalId=${goalId}`);
+            if (res.ok) {
+                const data = await res.json();
+                setDueReviews((prev) => ({ ...prev, [goalId]: data.nodes ?? [] }));
+            }
+        } catch {
+            // silent
+        }
+    }, []);
 
     useEffect(() => {
         async function load() {
@@ -46,8 +87,15 @@ export default function DashboardPage() {
                 }
                 if (!res.ok) return;
                 const data = await res.json();
-                setGoals(data.goals ?? []);
+                const loadedGoals: GoalRow[] = data.goals ?? [];
+                setGoals(loadedGoals);
                 setRoadmaps(data.roadmaps ?? []);
+
+                // Load progress + reviews for each goal
+                for (const g of loadedGoals) {
+                    loadProgress(g.id);
+                    loadDueReviews(g.id);
+                }
             } catch {
                 // silent
             } finally {
@@ -56,7 +104,7 @@ export default function DashboardPage() {
         }
 
         load();
-    }, [locale, router]);
+    }, [locale, router, loadProgress, loadDueReviews]);
 
     async function handleGenerate(goalId: string) {
         setGenerating(goalId);
@@ -75,6 +123,34 @@ export default function DashboardPage() {
             router.push(`/${locale}/roadmap/${data.roadmapId}`);
         } catch {
             setGenerating(null);
+        }
+    }
+
+    async function handleLogMinutes(goalId: string, minutes: number) {
+        setLogging(goalId);
+        try {
+            const res = await fetch("/api/progress/log", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ goalId, minutes }),
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setProgress((prev) => ({
+                    ...prev,
+                    [goalId]: {
+                        ...prev[goalId],
+                        todayMinutes: data.todayMinutes,
+                        weekMinutes: data.weekMinutes,
+                        streakCurrent: data.streakCurrent,
+                        streakBest: data.streakBest,
+                    },
+                }));
+            }
+        } catch {
+            // silent
+        } finally {
+            setLogging(null);
         }
     }
 
@@ -109,15 +185,18 @@ export default function DashboardPage() {
                     </button>
                 </div>
             ) : (
-                <div className="mt-6 space-y-4">
+                <div className="mt-6 space-y-6">
                     {goals.map((goal) => {
                         const activeRoadmap = getActiveRoadmap(goal.id);
+                        const prog = progress[goal.id];
+                        const due = dueReviews[goal.id] ?? [];
 
                         return (
                             <div
                                 key={goal.id}
                                 className="rounded-xl border border-border/50 bg-card p-5"
                             >
+                                {/* Header */}
                                 <div className="flex items-start justify-between">
                                     <div>
                                         <h2 className="font-semibold">
@@ -142,18 +221,118 @@ export default function DashboardPage() {
                                     </span>
                                 </div>
 
-                                <div className="mt-4 flex gap-2">
+                                {/* Progress stats */}
+                                {prog && (
+                                    <div className="mt-4 grid grid-cols-4 gap-3">
+                                        <div className="rounded-lg bg-muted/50 p-3 text-center">
+                                            <div className="text-2xl font-bold">
+                                                🔥 {prog.streakCurrent}
+                                            </div>
+                                            <div className="text-xs text-muted-foreground">
+                                                {t("streak")}
+                                            </div>
+                                        </div>
+                                        <div className="rounded-lg bg-muted/50 p-3 text-center">
+                                            <div className="text-2xl font-bold">
+                                                ⭐ {prog.streakBest}
+                                            </div>
+                                            <div className="text-xs text-muted-foreground">
+                                                {t("bestStreak")}
+                                            </div>
+                                        </div>
+                                        <div className="rounded-lg bg-muted/50 p-3 text-center">
+                                            <div className="text-2xl font-bold">
+                                                {prog.todayMinutes}
+                                            </div>
+                                            <div className="text-xs text-muted-foreground">
+                                                {t("todayMin")}
+                                            </div>
+                                        </div>
+                                        <div className="rounded-lg bg-muted/50 p-3 text-center">
+                                            <div className="text-2xl font-bold">
+                                                {prog.weekMinutes}
+                                            </div>
+                                            <div className="text-xs text-muted-foreground">
+                                                {t("weekMin")}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Mini history chart (7-day bars) */}
+                                {prog?.series && (
+                                    <div className="mt-3 flex items-end gap-1">
+                                        {prog.series.map((d) => {
+                                            const maxMin = Math.max(
+                                                ...prog.series.map((s) => s.minutes),
+                                                10
+                                            );
+                                            const heightPct = Math.max(
+                                                (d.minutes / maxMin) * 100,
+                                                4
+                                            );
+                                            const dayLabel = new Date(d.day + "T00:00:00")
+                                                .toLocaleDateString(locale, {
+                                                    weekday: "narrow",
+                                                });
+                                            return (
+                                                <div
+                                                    key={d.day}
+                                                    className="flex flex-1 flex-col items-center"
+                                                >
+                                                    <div
+                                                        className={`w-full rounded-sm transition-all ${d.minutes >= 10 ||
+                                                                d.nodesCompleted > 0
+                                                                ? "bg-primary"
+                                                                : d.minutes > 0
+                                                                    ? "bg-primary/40"
+                                                                    : "bg-muted"
+                                                            }`}
+                                                        style={{
+                                                            height: `${heightPct}%`,
+                                                            minHeight: "4px",
+                                                            maxHeight: "40px",
+                                                        }}
+                                                        title={`${d.day}: ${d.minutes} min`}
+                                                    />
+                                                    <span className="mt-1 text-[10px] text-muted-foreground">
+                                                        {dayLabel}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+
+                                {/* Action buttons */}
+                                <div className="mt-4 flex flex-wrap gap-2">
                                     {activeRoadmap ? (
-                                        <button
-                                            onClick={() =>
-                                                router.push(
-                                                    `/${locale}/roadmap/${activeRoadmap.id}`
-                                                )
-                                            }
-                                            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90"
-                                        >
-                                            {t("viewRoadmap")}
-                                        </button>
+                                        <>
+                                            <button
+                                                onClick={() =>
+                                                    router.push(
+                                                        `/${locale}/roadmap/${activeRoadmap.id}`
+                                                    )
+                                                }
+                                                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90"
+                                            >
+                                                {t("continue")}
+                                            </button>
+                                            {due.length > 0 && (
+                                                <button
+                                                    onClick={() =>
+                                                        router.push(
+                                                            `/${locale}/roadmap/${activeRoadmap.id}/node/${due[0].id}`
+                                                        )
+                                                    }
+                                                    className="rounded-lg border border-primary bg-primary/10 px-4 py-2 text-sm font-medium text-primary transition hover:bg-primary/20"
+                                                >
+                                                    {t("reviewDue", {
+                                                        count: due.length,
+                                                    })}
+                                                </button>
+                                            )}
+                                        </>
                                     ) : (
                                         <button
                                             onClick={() =>
@@ -173,6 +352,21 @@ export default function DashboardPage() {
                                             {generating === goal.id
                                                 ? "..."
                                                 : t("generateRoadmap")}
+                                        </button>
+                                    )}
+
+                                    {/* Log 10 min button */}
+                                    {activeRoadmap && (
+                                        <button
+                                            onClick={() =>
+                                                handleLogMinutes(goal.id, 10)
+                                            }
+                                            disabled={logging === goal.id}
+                                            className="rounded-lg border border-border px-4 py-2 text-sm transition hover:bg-muted disabled:opacity-50"
+                                        >
+                                            {logging === goal.id
+                                                ? "..."
+                                                : t("logMinutes")}
                                         </button>
                                     )}
                                 </div>
