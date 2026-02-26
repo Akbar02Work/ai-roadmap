@@ -175,6 +175,40 @@
         "colLatency": "Latency",
         "colStatus": "Status"
     },
+    "billing": {
+        "title": "Billing & Plans",
+        "currentPlan": "Current plan",
+        "free": "Free",
+        "periodEnd": "Renews: {date}",
+        "loadError": "Failed to load billing info.",
+        "checkoutError": "Failed to start checkout.",
+        "checkoutSuccess": "Payment successful! Your plan has been upgraded.",
+        "checkoutCancelled": "Checkout cancelled.",
+        "redirecting": "Redirecting…",
+        "downgradeNA": "Contact support",
+        "features": {
+            "free": [
+                "10 AI messages/day",
+                "1 roadmap/month",
+                "Community support"
+            ],
+            "starter": [
+                "50 AI messages/day",
+                "3 roadmaps/month",
+                "Email support"
+            ],
+            "pro": [
+                "200 AI messages/day",
+                "10 roadmaps/month",
+                "Priority support"
+            ],
+            "unlimited": [
+                "Unlimited AI messages",
+                "Unlimited roadmaps",
+                "Priority support"
+            ]
+        }
+    },
     "settings": {
         "title": "Settings",
         "language": "Language",

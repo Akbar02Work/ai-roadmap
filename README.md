@@ -53,10 +53,11 @@ Apply migrations in this exact order after the base schema exists:
 12. `supabase/migrations/0012_admin_rpc.sql` - adds `admin_users` and admin-only SECURITY DEFINER RPCs for cross-user observability reads.
 13. `supabase/migrations/0013_admin_users_rpc_hotfix.sql` - updates `rpc_admin_users` to read from `profiles` schema safely.
 14. `supabase/migrations/0014_profiles_email_admin_users.sql` - mirrors email into `profiles` and updates admin users RPC to return real emails.
+15. `supabase/migrations/0015_stripe_webhook_idempotency.sql` - idempotent webhook event log + unique constraint on `subscriptions.stripe_sub_id`.
 
 Recommended apply methods:
 
-1. Supabase SQL Editor: run each migration file in order (`0001` -> ... -> `0014`).
+1. Supabase SQL Editor: run each migration file in order (`0001` -> ... -> `0015`).
 2. Supabase CLI (if configured): `supabase db push` from the project root.
 
 `0003` through `0007` are mandatory for onboarding-to-progress flow:
@@ -65,6 +66,7 @@ Recommended apply methods:
 - `0006` + `0007`: safe node status transitions and single-active-node integrity.
 - `0008` + `0009` + `0010`: daily progress tracking and SRS reviews.
 - `0011` + `0012` + `0013` + `0014`: observability and admin features.
+- `0015`: Stripe webhook idempotency and subscription uniqueness.
 
 ### Admin Users (DB Source of Truth)
 
@@ -110,7 +112,7 @@ Why: protects against duplicate clicks, retries, and parallel tabs creating extr
 
 Before promoting to staging/production, verify all items:
 
-1. Migrations applied in order: `0001_rls.sql` -> ... -> `0014_profiles_email_admin_users.sql`.
+1. Migrations applied in order: `0001_rls.sql` -> ... -> `0015_stripe_webhook_idempotency.sql`.
 2. Supabase env is set:
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
@@ -126,6 +128,32 @@ Before promoting to staging/production, verify all items:
    - login/signup callback works (`/api/auth/callback`)
    - new signup gets `public.profiles` row
    - authenticated onboarding routes can read/write user-scoped data under RLS
+6. Stripe billing (if enabled):
+   - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
+   - `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_UNLIMITED`
+   - `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` (optional, reserved for Stripe.js)
+
+### Stripe Webhook Setup
+
+1. In Stripe Dashboard → Developers → Webhooks → Add endpoint.
+2. URL: `https://your-domain.com/api/billing/webhook`
+3. Events to subscribe:
+   - `checkout.session.completed`
+   - `customer.subscription.updated`
+   - `customer.subscription.deleted`
+4. Copy the signing secret → set `STRIPE_WEBHOOK_SECRET` env var.
+5. For local testing: `stripe listen --forward-to localhost:3000/api/billing/webhook`
+
+### Billing Smoke Checklist
+
+1. Navigate to `/{locale}/billing` → see 4 plan cards, current plan = free.
+2. Click "Upgrade" on Starter → redirected to Stripe Checkout.
+3. Complete test payment (use `4242 4242 4242 4242`) → redirected back with success banner.
+4. Refresh billing page → current plan = starter, period end shown.
+5. In Stripe Dashboard: cancel subscription → webhook fires → plan reverts to cancelled.
+6. `stripe_webhook_events` table has event IDs (idempotent on replay).
+7. Non-authenticated user → `/api/billing/status` returns 401.
+8. Invalid plan → `/api/billing/checkout` returns 400.
 
 ## Phase 5 Manual Test (Node Completion Rules)
 

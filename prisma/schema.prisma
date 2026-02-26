@@ -199,7 +199,7 @@ model Subscription {
   id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId             String    @map("user_id") @db.Uuid
   plan               String    @default("free") // 'free' | 'starter' | 'pro' | 'unlimited'
-  stripeSubId        String?   @map("stripe_sub_id")
+  stripeSubId        String?   @unique @map("stripe_sub_id")
   status             String    @default("active") // 'active' | 'cancelled' | 'past_due'
   currentPeriodStart DateTime? @map("current_period_start")
   currentPeriodEnd   DateTime? @map("current_period_end")
@@ -208,6 +208,16 @@ model Subscription {
   user Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("subscriptions")
+}
+
+// ============================================================
+// STRIPE WEBHOOK EVENTS (idempotency)
+// ============================================================
+model StripeWebhookEvent {
+  eventId   String   @id @map("event_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("stripe_webhook_events")
 }
 
 // ============================================================
