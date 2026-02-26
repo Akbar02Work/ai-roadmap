@@ -165,7 +165,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        trackEvent({
+        await trackEvent({
             supabase,
             userId,
             eventType: "onboarding_completed",

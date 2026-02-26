@@ -58,7 +58,7 @@ export async function POST() {
             );
         }
 
-        trackEvent({
+        await trackEvent({
             supabase,
             userId,
             eventType: "onboarding_started",

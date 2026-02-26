@@ -17,11 +17,11 @@ export interface TrackEventOptions {
 }
 
 /**
- * Fire-and-forget event tracking.
+ * Awaited event tracking with safe error swallowing.
  * Writes a row to `events` table. Errors are logged but never thrown.
  * IMPORTANT: Do NOT include PII (chat text, quiz answers, raw prompts) in payload.
  */
-export function trackEvent(opts: TrackEventOptions): void {
+export async function trackEvent(opts: TrackEventOptions): Promise<void> {
     const { supabase, userId, eventType, payload = {}, requestId } = opts;
 
     const safePayload = {
@@ -29,22 +29,21 @@ export function trackEvent(opts: TrackEventOptions): void {
         ...(requestId ? { request_id: requestId } : {}),
     };
 
-    // Fire and forget — don't await, don't block the request
-    supabase
-        .from("events")
-        .insert({
-            user_id: userId,
-            event_type: eventType,
-            payload: safePayload,
-        })
-        .then(({ error }: { error: unknown }) => {
-            if (error) {
-                console.warn(`[trackEvent] ${eventType} failed:`, error);
-            }
-        })
-        .catch((err: unknown) => {
-            console.warn(`[trackEvent] ${eventType} error:`, err);
-        });
+    try {
+        const { error } = await supabase
+            .from("events")
+            .insert({
+                user_id: userId,
+                event_type: eventType,
+                payload: safePayload,
+            });
+
+        if (error) {
+            console.warn(`[trackEvent] ${eventType} failed:`, error);
+        }
+    } catch (err: unknown) {
+        console.warn(`[trackEvent] ${eventType} error:`, err);
+    }
 }
 
 /**
