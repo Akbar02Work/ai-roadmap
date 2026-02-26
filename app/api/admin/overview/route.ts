@@ -11,36 +11,34 @@ export async function GET() {
     try {
         const { supabase } = await requireAdmin();
 
-        // Run aggregate queries in parallel
-        const [usersRes, goalsRes, roadmapsRes, eventsRes, aiLogsRes] = await Promise.all([
-            supabase.from("profiles").select("id", { count: "exact", head: true }),
-            supabase.from("goals").select("id", { count: "exact", head: true }),
-            supabase.from("roadmaps").select("id", { count: "exact", head: true }),
-            supabase.from("events").select("id", { count: "exact", head: true }),
-            supabase.from("ai_logs").select("id", { count: "exact", head: true }),
-        ]);
+        const { data, error } = await supabase.rpc("rpc_admin_overview");
 
-        // Recent events (last 24h) by type
-        const dayAgo = new Date(Date.now() - 86400000).toISOString();
-        const { data: recentEvents } = await supabase
-            .from("events")
-            .select("event_type")
-            .gte("created_at", dayAgo);
-
-        const eventCounts: Record<string, number> = {};
-        for (const e of recentEvents ?? []) {
-            eventCounts[e.event_type] = (eventCounts[e.event_type] ?? 0) + 1;
+        if (error) {
+            if (error.code === "42501") {
+                return NextResponse.json({ error: "Admin access denied" }, { status: 403 });
+            }
+            console.error("[admin/overview] query error:", error);
+            return NextResponse.json({ error: "Failed to fetch admin overview" }, { status: 503 });
         }
 
+        const payload =
+            data && typeof data === "object" && !Array.isArray(data)
+                ? (data as Record<string, unknown>)
+                : {};
+        const totals =
+            payload.totals && typeof payload.totals === "object" && !Array.isArray(payload.totals)
+                ? (payload.totals as Record<string, unknown>)
+                : {};
+        const recentEvents24h =
+            payload.recentEvents24h &&
+                typeof payload.recentEvents24h === "object" &&
+                !Array.isArray(payload.recentEvents24h)
+                ? (payload.recentEvents24h as Record<string, unknown>)
+                : {};
+
         return NextResponse.json({
-            totals: {
-                users: usersRes.count ?? 0,
-                goals: goalsRes.count ?? 0,
-                roadmaps: roadmapsRes.count ?? 0,
-                events: eventsRes.count ?? 0,
-                aiLogs: aiLogsRes.count ?? 0,
-            },
-            recentEvents24h: eventCounts,
+            totals,
+            recentEvents24h,
         });
     } catch (err) {
         if (err instanceof AuthError) {
