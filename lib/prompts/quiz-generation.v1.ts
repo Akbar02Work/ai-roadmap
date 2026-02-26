@@ -1,51 +1,65 @@
 // ============================================================
 // Prompt: Quiz Generation v1
-// Generates a multiple-choice quiz on a given topic.
+// Generates MCQ questions for a roadmap node.
 // ============================================================
 
 import type { LLMMessage, Locale } from "@/lib/llm/types";
 
 export const PROMPT_VERSION = "quiz-generation.v1";
 
-interface QuizPromptContext {
-    topic: string;
-    level?: string; // e.g. 'A1', 'B2', 'beginner'
-    numQuestions?: number;
+interface QuizGenContext {
+    nodeTitle: string;
+    nodeDescription: string;
+    skills: string[];
+    cefrLevel: string;
+    language: string;
 }
 
 export function buildPrompt(
     locale: Locale,
-    ctx: QuizPromptContext
+    ctx: QuizGenContext
 ): LLMMessage[] {
     const lang = locale === "ru" ? "Russian" : "English";
-    const numQ = ctx.numQuestions ?? 3;
-    const levelHint = ctx.level ? ` at ${ctx.level} level` : "";
 
     return [
         {
             role: "system",
             content: [
-                `You are an expert quiz creator for language learners.`,
-                `Generate quizzes in ${lang}.`,
-                `IMPORTANT: respond ONLY with valid JSON matching this exact structure:`,
+                `You are an expert quiz creator for personalized learning.`,
+                `Create a short multiple-choice quiz in ${lang}.`,
+                ``,
+                `Respond ONLY with valid JSON matching this exact schema:`,
                 `{`,
-                `  "topic": "<string>",`,
-                `  "level": "<string>",`,
                 `  "questions": [`,
                 `    {`,
-                `      "question": "<string>",`,
-                `      "options": ["<string>", "<string>", "<string>", "<string>"],`,
-                `      "correctIndex": <0|1|2|3>,`,
-                `      "explanation": "<string>"`,
+                `      "prompt": "<question text>",`,
+                `      "options": ["<option A>", "<option B>", "<option C>", "<option D>"],`,
+                `      "correctIndex": <0-3>,`,
+                `      "explanation": "<why this answer is correct>"`,
                 `    }`,
                 `  ]`,
                 `}`,
-                `Do NOT include markdown code fences or any text outside the JSON object.`,
+                ``,
+                `Rules:`,
+                `- Create 4-5 questions.`,
+                `- Each question must have exactly 4 options.`,
+                `- correctIndex is 0-based (0=first option).`,
+                `- Questions should test the skills listed below at the appropriate level.`,
+                `- Mix difficulty: 2 easy, 2 medium, 1 harder.`,
+                `- Explanations should be brief but educational.`,
+                `- Do NOT include markdown code fences or any text outside the JSON.`,
             ].join("\n"),
         },
         {
             role: "user",
-            content: `Create a ${numQ}-question multiple-choice quiz on "${ctx.topic}"${levelHint}.`,
+            content: [
+                `Create a quiz for this learning node:`,
+                `- Topic: ${ctx.nodeTitle}`,
+                `- Description: ${ctx.nodeDescription}`,
+                `- Skills: ${ctx.skills.join(", ")}`,
+                `- Student level: ${ctx.cefrLevel}`,
+                `- Subject: ${ctx.language}`,
+            ].join("\n"),
         },
     ];
 }

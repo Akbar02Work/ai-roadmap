@@ -47,6 +47,11 @@ function saveSession(sessionId: string, goalId: string) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ sessionId, goalId }));
 }
 
+function clearSavedSession() {
+    if (typeof window === "undefined") return;
+    localStorage.removeItem(STORAGE_KEY);
+}
+
 // --- Component ---
 
 export default function OnboardingPage() {
@@ -149,6 +154,9 @@ export default function OnboardingPage() {
                             }
                         }
                         return;
+                    }
+                    if (res.status === 404) {
+                        clearSavedSession();
                     }
                 } catch {
                     // Session not found, create new one
