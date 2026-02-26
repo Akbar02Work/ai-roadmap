@@ -109,7 +109,12 @@ BEGIN
     SELECT COALESCE(jsonb_agg(to_jsonb(u)), '[]'::jsonb)
     INTO rows_json
     FROM (
-        SELECT id, email, display_name, plan, created_at
+        SELECT
+            id,
+            NULL::text AS email,
+            display_name,
+            NULL::text AS plan,
+            created_at
         FROM public.profiles
         ORDER BY created_at DESC, id DESC
         LIMIT safe_limit

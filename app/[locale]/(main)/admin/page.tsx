@@ -13,9 +13,9 @@ interface Overview {
 
 interface UserRow {
     id: string;
-    email: string;
+    email?: string | null;
     display_name: string | null;
-    plan: string;
+    plan?: string | null;
     created_at: string;
 }
 
@@ -54,9 +54,11 @@ export default function AdminPage() {
     const [events, setEvents] = useState<EventRow[]>([]);
     const [aiLogs, setAiLogs] = useState<AiLogRow[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
 
     const loadTab = useCallback(async (t: Tab) => {
         setLoading(true);
+        setLoadError(null);
         try {
             const endpoint = t === "overview" ? "/api/admin/overview"
                 : t === "users" ? "/api/admin/users?limit=50"
@@ -66,7 +68,17 @@ export default function AdminPage() {
             const res = await fetch(endpoint);
             if (res.status === 401) { router.push(`/${locale}/login`); return; }
             if (res.status === 403) { setForbidden(true); return; }
-            if (!res.ok) return;
+            if (!res.ok) {
+                let serverMessage = "";
+                try {
+                    const errData = await res.json() as { error?: string };
+                    serverMessage = errData.error ?? "";
+                } catch {
+                    // ignore non-json errors
+                }
+                setLoadError(serverMessage || tCommon("error"));
+                return;
+            }
 
             const data = await res.json();
             if (t === "overview") setOverview(data);
@@ -74,11 +86,11 @@ export default function AdminPage() {
             else if (t === "events") setEvents(data.events ?? []);
             else setAiLogs(data.logs ?? []);
         } catch {
-            // silent
+            setLoadError(tCommon("error"));
         } finally {
             setLoading(false);
         }
-    }, [locale, router]);
+    }, [locale, router, tCommon]);
 
     useEffect(() => { loadTab(tab); }, [tab, loadTab]);
 
@@ -120,6 +132,12 @@ export default function AdminPage() {
             {loading && (
                 <div className="mt-8 animate-pulse text-center text-muted-foreground">
                     {tCommon("loading")}
+                </div>
+            )}
+
+            {!loading && loadError && (
+                <div className="mt-4 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                    {loadError}
                 </div>
             )}
 
@@ -169,7 +187,7 @@ export default function AdminPage() {
                             {users.map((u) => (
                                 <tr key={u.id} className="border-b border-border/30">
                                     <td className="py-2">{u.email ?? u.display_name ?? u.id.slice(0, 8)}</td>
-                                    <td className="py-2"><span className="rounded bg-muted px-1.5 py-0.5 text-xs">{u.plan}</span></td>
+                                    <td className="py-2"><span className="rounded bg-muted px-1.5 py-0.5 text-xs">{u.plan ?? "—"}</span></td>
                                     <td className="py-2 text-muted-foreground">{new Date(u.created_at).toLocaleDateString()}</td>
                                 </tr>
                             ))}
