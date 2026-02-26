@@ -85,12 +85,19 @@
     "dashboard": {
         "title": "Dashboard",
         "activeGoals": "Active Goals",
-        "streak": "Day Streak",
+        "streak": "Streak",
+        "bestStreak": "Best",
+        "todayMin": "Today min",
+        "weekMin": "Week min",
+        "chartTooltip": "{day}: {minutes} min",
         "noGoals": "No active goals yet. Start by creating one!",
         "createGoal": "Create New Goal",
         "viewRoadmap": "View Roadmap",
+        "continue": "Continue",
         "generateRoadmap": "Generate Roadmap",
-        "needsDiagnosis": "Complete onboarding first to generate a roadmap"
+        "needsDiagnosis": "Complete onboarding first to generate a roadmap",
+        "reviewDue": "Review ({count})",
+        "logMinutes": "+ 10 min"
     },
     "roadmap": {
         "title": "Your Roadmap",
