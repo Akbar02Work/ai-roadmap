@@ -7,6 +7,7 @@
 // ============================================================
 
 import "server-only";
+import { randomUUID } from "node:crypto";
 import { z } from "zod/v4";
 import { callProvider } from "./providers";
 import {
@@ -66,13 +67,14 @@ async function logToAiLogs(
     errorMessage: string | undefined,
     ctx: CallLLMContext
 ): Promise<void> {
-    if (!ctx.supabase || !ctx.userId || !ctx.requestId) {
+    if (!ctx.supabase || !ctx.userId) {
         throw new LLMError(
             "LLM context missing (supabase required)",
             500,
             input.task
         );
     }
+    const requestId = ctx.requestId ?? randomUUID();
 
     try {
         const { error } = await ctx.supabase.from("ai_logs").insert({
@@ -85,7 +87,7 @@ async function logToAiLogs(
             latency_ms: raw?.latencyMs ?? null,
             status,
             error_message: errorMessage?.slice(0, 2000) ?? null,
-            request_id: ctx.requestId,
+            request_id: requestId,
         });
         if (error) {
             throw new Error(error.message);
@@ -173,12 +175,15 @@ async function callLLMInternal<T>(
     schema: z.ZodType<T> | null,
     ctx: CallLLMContext
 ): Promise<CallLLMResult<T>> {
-    if (!ctx.supabase || !ctx.userId || !ctx.requestId) {
+    if (!ctx.supabase || !ctx.userId) {
         throw new LLMError(
             "LLM context missing (supabase required)",
             500,
             input.task
         );
+    }
+    if (!ctx.requestId) {
+        ctx = { ...ctx, requestId: randomUUID() };
     }
 
     const effectiveInput: CallLLMInput = {
@@ -194,9 +199,9 @@ async function callLLMInternal<T>(
     if (!rlResult.allowed) {
         throw new LLMError(
             rlResult.reason ??
-                (rlResult.statusCode === 503
-                    ? "Rate limit backend misconfigured."
-                    : "Rate limit exceeded. Please slow down."),
+            (rlResult.statusCode === 503
+                ? "Rate limit backend misconfigured."
+                : "Rate limit exceeded. Please slow down."),
             rlResult.statusCode ?? 429,
             input.task
         );

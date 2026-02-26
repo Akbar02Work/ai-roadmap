@@ -72,6 +72,7 @@ model Roadmap {
   generatedBy        String?  @map("generated_by")
   roadmapMeta        Json     @default("{}") @map("roadmap_meta")
   regenerationReason String?  @map("regeneration_reason")
+  idempotencyKey     String?  @map("idempotency_key") @db.Uuid
   createdAt          DateTime @default(now()) @map("created_at")
 
   goal      Goal          @relation(fields: [goalId], references: [id], onDelete: Cascade)
@@ -87,19 +88,23 @@ model Roadmap {
 // v2 tech debt: extract to user_node_progress table for template reuse.
 // ============================================================
 model RoadmapNode {
-  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  roadmapId     String   @map("roadmap_id") @db.Uuid
-  sortOrder     Int      @map("sort_order")
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  roadmapId     String    @map("roadmap_id") @db.Uuid
+  sortOrder     Int       @map("sort_order")
   title         String
   description   String?
-  nodeType      String   @default("lesson") @map("node_type") // 'lesson' | 'quiz' | 'practice' | 'review'
-  content       Json     @default("{}") // lesson content, exercises
-  estMinutes    Int      @default(15) @map("est_minutes")
-  passRules     Json     @default("{}") @map("pass_rules") // {min_score: 0.7, require_artifact: false}
-  prerequisites String[] @db.Uuid // node ids that must be completed first
-  status        String   @default("locked") // 'locked' | 'active' | 'completed' | 'skipped'
-  skills        String[] // skills this node develops
-  createdAt     DateTime @default(now()) @map("created_at")
+  nodeType      String    @default("lesson") @map("node_type") // 'lesson' | 'quiz' | 'practice' | 'review'
+  content       Json      @default("{}") // lesson content, exercises
+  estMinutes    Int       @default(15) @map("est_minutes")
+  passRules     Json      @default("{}") @map("pass_rules") // {min_score: 0.7, require_artifact: false}
+  prerequisites String[]  @db.Uuid // node ids that must be completed first
+  status        String    @default("locked") // 'locked' | 'active' | 'completed' | 'skipped'
+  skills        String[]  // skills this node develops
+  nextReviewAt      DateTime? @map("next_review_at")
+  lastReviewAt      DateTime? @map("last_review_at")
+  reviewIntervalDays Int     @default(0) @map("review_interval_days")
+  reviewCount       Int      @default(0) @map("review_count")
+  createdAt     DateTime  @default(now()) @map("created_at")
 
   roadmap  Roadmap   @relation(fields: [roadmapId], references: [id], onDelete: Cascade)
   attempts Attempt[]
@@ -163,11 +168,28 @@ model AiLog {
   latencyMs    Int?     @map("latency_ms")
   status       String   @default("success") // 'success' | 'error' | 'retry'
   errorMessage String?  @map("error_message")
+  requestId    String?  @map("request_id") @db.Uuid
   createdAt    DateTime @default(now()) @map("created_at")
 
   user Profile? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@map("ai_logs")
+}
+
+// ============================================================
+// DAILY PROGRESS (Phase 6)
+// ============================================================
+model DailyProgress {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  goalId         String   @map("goal_id") @db.Uuid
+  day            DateTime @db.Date @default(now())
+  minutes        Int      @default(0)
+  nodesCompleted Int      @default(0) @map("nodes_completed")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([goalId, day])
+  @@map("daily_progress")
 }
 
 // ============================================================
