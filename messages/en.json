@@ -143,7 +143,17 @@
         "retryQuiz": "Try again",
         "passed": "Completed! 🎉",
         "failed": "Not passed — try again",
-        "scoreText": "{correct}/{total} correct ({pct}%)"
+        "scoreText": "{correct}/{total} correct ({pct}%)",
+        "reviewPrompt": "Quick review: did you confidently recall this node?",
+        "reviewPass": "I remembered",
+        "reviewFail": "Need repeat",
+        "reviewSubmitting": "Saving...",
+        "reviewDonePassed": "Review recorded",
+        "reviewDoneFailed": "Review scheduled sooner",
+        "nextReviewAt": "Next review: {date}",
+        "reviewScheduled": "scheduled",
+        "reviewInterval": "Interval: {days} day(s)",
+        "reviewCountText": "Successful reviews: {count}"
     },
     "admin": {
         "title": "Admin",

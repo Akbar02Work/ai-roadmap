@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/auth";
 import { callLLMStructured, LLMError } from "@/lib/llm";
+import { generateRequestId } from "@/lib/observability/track-event";
 import {
     QuizOutputSchema,
     QuizPublicOutputSchema,
@@ -41,6 +42,7 @@ export async function POST(
 ) {
     try {
         const { userId, supabase } = await requireAuth();
+        const requestId = generateRequestId();
         const { id } = await params;
 
         // 1. Load node (RLS enforced)
@@ -112,7 +114,7 @@ export async function POST(
                 messages,
             },
             QuizOutputSchema,
-            { userId, supabase }
+            { userId, supabase, requestId }
         );
 
         // 4. Save full quiz on server; return only sanitized public quiz.

@@ -325,7 +325,7 @@ export default function DashboardPage() {
                                                 <button
                                                     onClick={() =>
                                                         router.push(
-                                                            `/${locale}/roadmap/${activeRoadmap.id}`
+                                                            `/${locale}/roadmap/${activeRoadmap.id}/node/${due[0].id}`
                                                         )
                                                     }
                                                     className="rounded-lg border border-primary bg-primary/10 px-4 py-2 text-sm font-medium text-primary transition hover:bg-primary/20"

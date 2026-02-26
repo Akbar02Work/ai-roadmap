@@ -44,6 +44,13 @@ export default function NodePage() {
         correct: number;
         total: number;
     } | null>(null);
+    const [reviewSubmitting, setReviewSubmitting] = useState(false);
+    const [reviewResult, setReviewResult] = useState<{
+        passed: boolean;
+        nextReviewAt: string | null;
+        intervalDays: number | null;
+        reviewCount: number | null;
+    } | null>(null);
     const roadmapPath = `/${locale}/roadmap/${roadmapId}`;
 
     function goToRoadmap() {
@@ -152,6 +159,33 @@ export default function NodePage() {
         }
     }
 
+    async function handleReview(passed: boolean) {
+        setReviewSubmitting(true);
+        setError(null);
+        try {
+            const res = await fetch(`/api/nodes/${nodeId}/review`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ passed }),
+            });
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error ?? t("submitError"));
+            }
+            const data = await res.json();
+            setReviewResult({
+                passed,
+                nextReviewAt: data.nextReviewAt ?? null,
+                intervalDays: data.intervalDays ?? null,
+                reviewCount: data.reviewCount ?? null,
+            });
+        } catch (err) {
+            setError(err instanceof Error ? err.message : t("submitError"));
+        } finally {
+            setReviewSubmitting(false);
+        }
+    }
+
     function handleRetry() {
         setResult(null);
         setError(null);
@@ -177,6 +211,8 @@ export default function NodePage() {
 
     if (!node) return null;
 
+    const isAttemptFlow = node.status === "active";
+    const isReviewFlow = node.status === "completed";
     const allAnswered = quiz ? answers.every((a) => a !== null) : false;
     const answeredCount = quiz ? answers.filter((answer) => answer !== null).length : 0;
 
@@ -261,8 +297,78 @@ export default function NodePage() {
                 </div>
             )}
 
+            {/* Result (after review submit) */}
+            {reviewResult && (
+                <div className="mb-6 rounded-xl border-2 border-primary/30 bg-primary/5 p-6 text-center">
+                    <h2 className="text-xl font-bold">
+                        {reviewResult.passed
+                            ? t("reviewDonePassed")
+                            : t("reviewDoneFailed")}
+                    </h2>
+                    <p className="mt-2 text-muted-foreground">
+                        {t("nextReviewAt", {
+                            date: reviewResult.nextReviewAt
+                                ? new Date(reviewResult.nextReviewAt).toLocaleString(
+                                    locale
+                                )
+                                : t("reviewScheduled"),
+                        })}
+                    </p>
+                    {typeof reviewResult.intervalDays === "number" && (
+                        <p className="mt-1 text-sm text-muted-foreground">
+                            {t("reviewInterval", {
+                                days: reviewResult.intervalDays,
+                            })}
+                        </p>
+                    )}
+                    {typeof reviewResult.reviewCount === "number" && (
+                        <p className="mt-1 text-sm text-muted-foreground">
+                            {t("reviewCountText", {
+                                count: reviewResult.reviewCount,
+                            })}
+                        </p>
+                    )}
+                    <button
+                        onClick={goToRoadmap}
+                        className="mt-4 rounded-xl bg-primary px-6 py-3 text-sm font-medium text-primary-foreground transition hover:opacity-90"
+                    >
+                        {t("backToRoadmap")}
+                    </button>
+                </div>
+            )}
+
+            {/* Review flow for completed nodes */}
+            {isReviewFlow && !reviewResult && (
+                <div className="mb-6 rounded-xl border border-border/50 bg-card p-6 text-center">
+                    <p className="text-muted-foreground">{t("reviewPrompt")}</p>
+                    {error && (
+                        <p className="mt-3 text-sm text-destructive">{error}</p>
+                    )}
+                    <div className="mt-4 flex flex-wrap justify-center gap-3">
+                        <button
+                            onClick={() => handleReview(true)}
+                            disabled={reviewSubmitting}
+                            className="rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-50"
+                        >
+                            {reviewSubmitting
+                                ? t("reviewSubmitting")
+                                : t("reviewPass")}
+                        </button>
+                        <button
+                            onClick={() => handleReview(false)}
+                            disabled={reviewSubmitting}
+                            className="rounded-xl border border-border px-5 py-2.5 text-sm transition hover:bg-muted disabled:opacity-50"
+                        >
+                            {reviewSubmitting
+                                ? t("reviewSubmitting")
+                                : t("reviewFail")}
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* No quiz yet */}
-            {!quiz && !result?.passed && (
+            {isAttemptFlow && !quiz && !result?.passed && (
                 <div className="rounded-xl border border-border/50 bg-card p-8 text-center">
                     <p className="text-muted-foreground">
                         {t("noQuizYet")}
@@ -278,7 +384,7 @@ export default function NodePage() {
             )}
 
             {/* Quiz */}
-            {quiz && !result && (
+            {isAttemptFlow && quiz && !result && (
                 <div className="space-y-6">
                     <p className="text-sm text-muted-foreground">
                         {t("answeredCount", {
