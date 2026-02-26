@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod/v4";
 import { requireAuth, AuthError } from "@/lib/auth";
 import { callLLMStructured, LLMError } from "@/lib/llm";
+import { generateRequestId } from "@/lib/observability/track-event";
 import { DiagnoseQuestionsOutputSchema } from "@/lib/schemas/onboarding";
 import {
     buildPrompt,
@@ -21,6 +22,7 @@ const RequestBodySchema = z.object({
 export async function POST(request: NextRequest) {
     try {
         const { userId, supabase } = await requireAuth();
+        const requestId = generateRequestId();
 
         const raw = await request.json();
         const body = RequestBodySchema.parse(raw);
@@ -62,7 +64,7 @@ export async function POST(request: NextRequest) {
                 messages,
             },
             DiagnoseQuestionsOutputSchema,
-            { userId, supabase }
+            { userId, supabase, requestId }
         );
 
         return NextResponse.json({

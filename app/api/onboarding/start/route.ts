@@ -11,6 +11,7 @@ import { trackEvent, generateRequestId } from "@/lib/observability/track-event";
 export async function POST() {
     try {
         const { userId, supabase } = await requireAuth();
+        const requestId = generateRequestId();
 
         // 1. Create goal
         const { data: goal, error: goalError } = await supabase
@@ -62,7 +63,7 @@ export async function POST() {
             userId,
             eventType: "onboarding_started",
             payload: { goalId: goal.id, sessionId: session.id },
-            requestId: generateRequestId(),
+            requestId,
         });
 
         return NextResponse.json(

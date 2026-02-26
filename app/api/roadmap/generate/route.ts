@@ -91,6 +91,7 @@ function extractGenerateRoadmapResult(data: unknown): {
 export async function POST(request: NextRequest) {
     try {
         const { userId, supabase } = await requireAuth();
+        const requestId = generateRequestId();
 
         const raw = await request.json();
         const body = RequestBodySchema.parse(raw);
@@ -147,7 +148,7 @@ export async function POST(request: NextRequest) {
                 messages,
             },
             RoadmapOutputSchema,
-            { userId, supabase }
+            { userId, supabase, requestId }
         );
 
         const { roadmapTitle, summary, nodes } = llmResult.data;
@@ -228,7 +229,7 @@ export async function POST(request: NextRequest) {
                 deduped: result.deduped,
                 nodeCount: nodes.length,
             },
-            requestId: generateRequestId(),
+            requestId,
         });
 
         return NextResponse.json(

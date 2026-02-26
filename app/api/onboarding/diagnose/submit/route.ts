@@ -40,6 +40,7 @@ const RequestBodySchema = z.object({
 export async function POST(request: NextRequest) {
     try {
         const { userId, supabase } = await requireAuth();
+        const requestId = generateRequestId();
 
         const raw = await request.json();
         const body = RequestBodySchema.parse(raw);
@@ -107,7 +108,7 @@ export async function POST(request: NextRequest) {
                 messages,
             },
             DiagnoseResultSchema,
-            { userId, supabase }
+            { userId, supabase, requestId }
         );
 
         const { cefrLevel, explanation } = result.data;
@@ -169,7 +170,7 @@ export async function POST(request: NextRequest) {
             userId,
             eventType: "onboarding_completed",
             payload: { goalId: body.goalId, cefrLevel },
-            requestId: generateRequestId(),
+            requestId,
         });
 
         return NextResponse.json({ cefrLevel, explanation });
