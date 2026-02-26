@@ -8,12 +8,9 @@
 
 import "server-only";
 import { z } from "zod/v4";
-import { prisma } from "@/lib/db";
 import { callProvider } from "./providers";
 import {
-    checkUsageLimit,
     checkUsageLimitWithSupabase,
-    consumeUsage,
     consumeUsageWithSupabase,
 } from "./usage";
 import { checkRateLimit } from "./rate-limit";
@@ -66,41 +63,33 @@ async function logToAiLogs(
     attemptedModel: string,
     raw: RawLLMResponse | null,
     status: "success" | "error",
-    errorMessage?: string,
-    ctx?: CallLLMContext
+    errorMessage: string | undefined,
+    ctx: CallLLMContext
 ): Promise<void> {
-    try {
-        if (ctx) {
-            const { error } = await ctx.supabase.from("ai_logs").insert({
-                user_id: ctx.userId,
-                task_type: input.task,
-                model: raw?.model ?? attemptedModel,
-                prompt_version: input.promptVersion,
-                input_tokens: raw?.inputTokens ?? null,
-                output_tokens: raw?.outputTokens ?? null,
-                latency_ms: raw?.latencyMs ?? null,
-                status,
-                error_message: errorMessage?.slice(0, 2000) ?? null,
-            });
-            if (error) {
-                throw new Error(error.message);
-            }
-            return;
-        }
+    if (!ctx.supabase || !ctx.userId || !ctx.requestId) {
+        throw new LLMError(
+            "LLM context missing (supabase required)",
+            500,
+            input.task
+        );
+    }
 
-        await prisma.aiLog.create({
-            data: {
-                userId: input.userId ?? null,
-                taskType: input.task,
-                model: raw?.model ?? attemptedModel,
-                promptVersion: input.promptVersion,
-                inputTokens: raw?.inputTokens ?? null,
-                outputTokens: raw?.outputTokens ?? null,
-                latencyMs: raw?.latencyMs ?? null,
-                status,
-                errorMessage: errorMessage?.slice(0, 2000) ?? null,
-            },
+    try {
+        const { error } = await ctx.supabase.from("ai_logs").insert({
+            user_id: ctx.userId,
+            task_type: input.task,
+            model: raw?.model ?? attemptedModel,
+            prompt_version: input.promptVersion,
+            input_tokens: raw?.inputTokens ?? null,
+            output_tokens: raw?.outputTokens ?? null,
+            latency_ms: raw?.latencyMs ?? null,
+            status,
+            error_message: errorMessage?.slice(0, 2000) ?? null,
+            request_id: ctx.requestId,
         });
+        if (error) {
+            throw new Error(error.message);
+        }
     } catch (e) {
         // Logging must never crash the main flow
         console.error("[ai_logs] Failed to persist log:", e);
@@ -133,46 +122,27 @@ async function onSuccess(
     input: CallLLMInput,
     raw: RawLLMResponse,
     attemptedModel: string,
-    ctx?: CallLLMContext
+    ctx: CallLLMContext
 ): Promise<void> {
-    if (ctx) {
-        const consumed = await consumeUsageWithSupabase(
-            ctx,
-            raw.inputTokens + raw.outputTokens,
-            1
+    const consumed = await consumeUsageWithSupabase(
+        ctx,
+        raw.inputTokens + raw.outputTokens,
+        1
+    );
+    if (!consumed.allowed) {
+        await logToAiLogs(
+            input,
+            attemptedModel,
+            raw,
+            "error",
+            consumed.reason ?? "Usage limit exceeded.",
+            ctx
         );
-        if (!consumed.allowed) {
-            await logToAiLogs(
-                input,
-                attemptedModel,
-                raw,
-                "error",
-                consumed.reason ?? "Usage limit exceeded.",
-                ctx
-            );
-            throw new LLMError(
-                consumed.reason ?? "Usage limit exceeded.",
-                consumed.statusCode ?? 403,
-                input.task
-            );
-        }
-    } else if (input.userId) {
-        const consumed = await consumeUsage(input.userId, raw.inputTokens + raw.outputTokens, 1);
-        if (!consumed.allowed) {
-            await logToAiLogs(
-                input,
-                attemptedModel,
-                raw,
-                "error",
-                consumed.reason ?? "Usage limit exceeded.",
-                ctx
-            );
-            throw new LLMError(
-                consumed.reason ?? "Usage limit exceeded.",
-                consumed.statusCode ?? 403,
-                input.task
-            );
-        }
+        throw new LLMError(
+            consumed.reason ?? "Usage limit exceeded.",
+            consumed.statusCode ?? 403,
+            input.task
+        );
     }
     await logToAiLogs(input, attemptedModel, raw, "success", undefined, ctx);
 }
@@ -181,7 +151,7 @@ async function onSuccess(
 
 export async function callLLM(
     input: CallLLMInput,
-    ctx?: CallLLMContext
+    ctx: CallLLMContext
 ): Promise<CallLLMResult<string>> {
     return callLLMInternal(input, null, ctx);
 }
@@ -191,7 +161,7 @@ export async function callLLM(
 export async function callLLMStructured<T>(
     input: CallLLMInput,
     schema: z.ZodType<T>,
-    ctx?: CallLLMContext
+    ctx: CallLLMContext
 ): Promise<CallLLMResult<T>> {
     return callLLMInternal(input, schema, ctx);
 }
@@ -201,11 +171,19 @@ export async function callLLMStructured<T>(
 async function callLLMInternal<T>(
     input: CallLLMInput,
     schema: z.ZodType<T> | null,
-    ctx?: CallLLMContext
+    ctx: CallLLMContext
 ): Promise<CallLLMResult<T>> {
+    if (!ctx.supabase || !ctx.userId || !ctx.requestId) {
+        throw new LLMError(
+            "LLM context missing (supabase required)",
+            500,
+            input.task
+        );
+    }
+
     const effectiveInput: CallLLMInput = {
         ...input,
-        userId: ctx?.userId ?? input.userId,
+        userId: ctx.userId,
     };
     const routing = MODEL_ROUTING[input.task];
     const jsonMode = schema !== null;
@@ -225,17 +203,13 @@ async function callLLMInternal<T>(
     }
 
     // 2. Usage limit check (only for authenticated users)
-    if (effectiveInput.userId) {
-        const usageResult = ctx
-            ? await checkUsageLimitWithSupabase(ctx)
-            : await checkUsageLimit(effectiveInput.userId);
-        if (!usageResult.allowed) {
-            throw new LLMError(
-                usageResult.reason ?? "Usage limit exceeded.",
-                usageResult.statusCode ?? 403,
-                input.task
-            );
-        }
+    const usageResult = await checkUsageLimitWithSupabase(ctx);
+    if (!usageResult.allowed) {
+        throw new LLMError(
+            usageResult.reason ?? "Usage limit exceeded.",
+            usageResult.statusCode ?? 403,
+            input.task
+        );
     }
 
     // 3. Primary model: up to PRIMARY_RETRIES attempts
@@ -245,20 +219,20 @@ async function callLLMInternal<T>(
     for (let attempt = 1; attempt <= PRIMARY_RETRIES; attempt++) {
         totalAttempts++;
         try {
-                const raw = await tryCall(routing.primary, input.messages, jsonMode);
-                lastRaw = raw;
+            const raw = await tryCall(routing.primary, input.messages, jsonMode);
+            lastRaw = raw;
 
-                if (schema) {
-                    const data = parseAndValidate(raw.content, schema);
-                    await onSuccess(effectiveInput, raw, routing.primary.model, ctx);
-                    return { data, meta: buildMeta(raw, input.promptVersion, totalAttempts, false) };
-                }
-
-                // No schema — return raw content
+            if (schema) {
+                const data = parseAndValidate(raw.content, schema);
                 await onSuccess(effectiveInput, raw, routing.primary.model, ctx);
-                return {
-                    data: raw.content as T,
-                    meta: buildMeta(raw, input.promptVersion, totalAttempts, false),
+                return { data, meta: buildMeta(raw, input.promptVersion, totalAttempts, false) };
+            }
+
+            // No schema — return raw content
+            await onSuccess(effectiveInput, raw, routing.primary.model, ctx);
+            return {
+                data: raw.content as T,
+                meta: buildMeta(raw, input.promptVersion, totalAttempts, false),
             };
         } catch (error) {
             lastError = error instanceof Error ? error : new Error(String(error));
