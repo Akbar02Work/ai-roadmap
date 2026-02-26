@@ -115,6 +115,26 @@
         "failed": "Try Again",
         "dispute": "Dispute Result"
     },
+    "admin": {
+        "title": "Admin",
+        "forbidden": "Admin access denied.",
+        "tabOverview": "Overview",
+        "tabUsers": "Users",
+        "tabEvents": "Events",
+        "tabAiLogs": "AI Logs",
+        "events24h": "Events (last 24h)",
+        "noEvents": "No events in the last 24 hours.",
+        "colEmail": "Email",
+        "colPlan": "Plan",
+        "colCreated": "Created",
+        "colType": "Type",
+        "colPayload": "Payload",
+        "colTask": "Task",
+        "colModel": "Model",
+        "colTokens": "In/Out Tokens",
+        "colLatency": "Latency",
+        "colStatus": "Status"
+    },
     "settings": {
         "title": "Settings",
         "language": "Language",

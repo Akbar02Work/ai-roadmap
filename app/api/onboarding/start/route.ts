@@ -6,6 +6,7 @@
 
 import { NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/auth";
+import { trackEvent, generateRequestId } from "@/lib/observability/track-event";
 
 export async function POST() {
     try {
@@ -55,6 +56,14 @@ export async function POST() {
                 { status: 500 }
             );
         }
+
+        trackEvent({
+            supabase,
+            userId,
+            eventType: "onboarding_started",
+            payload: { goalId: goal.id, sessionId: session.id },
+            requestId: generateRequestId(),
+        });
 
         return NextResponse.json(
             { sessionId: session.id, goalId: goal.id },

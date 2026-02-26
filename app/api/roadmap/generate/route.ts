@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
+import { trackEvent, generateRequestId } from "@/lib/observability/track-event";
 import { z } from "zod/v4";
 import { requireAuth, AuthError } from "@/lib/auth";
 import { callLLMStructured, LLMError } from "@/lib/llm";
@@ -217,6 +218,19 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        trackEvent({
+            supabase,
+            userId,
+            eventType: "roadmap_generated",
+            payload: {
+                goalId: body.goalId,
+                roadmapId: result.roadmapId,
+                deduped: result.deduped,
+                nodeCount: nodes.length,
+            },
+            requestId: generateRequestId(),
+        });
+
         return NextResponse.json(
             {
                 roadmapId: result.roadmapId,
@@ -258,7 +272,11 @@ export async function POST(request: NextRequest) {
                         ? "Usage limit exceeded."
                         : status === 503 && err.message === "Rate limit backend misconfigured."
                             ? "Rate limit backend misconfigured."
-                        : "LLM provider unavailable. Please try again later.";
+                            : "LLM provider unavailable. Please try again later.";
+
+            // Note: rate_limit_hit / usage_limit_hit events are logged
+            // at the LLM layer level, not here (supabase not in scope).
+
             return NextResponse.json(
                 { error: safeMessage },
                 { status }

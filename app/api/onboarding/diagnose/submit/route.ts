@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod/v4";
 import { requireAuth, AuthError } from "@/lib/auth";
+import { trackEvent, generateRequestId } from "@/lib/observability/track-event";
 import { callLLMStructured, LLMError } from "@/lib/llm";
 import { DiagnoseResultSchema } from "@/lib/schemas/onboarding";
 import {
@@ -140,10 +141,10 @@ export async function POST(request: NextRequest) {
         // Mark session as completed
         const { data: updatedSessions, error: sessionUpdateError } =
             await supabase
-            .from("onboarding_sessions")
-            .update({ status: "completed" })
-            .eq("id", body.sessionId)
-            .select("id");
+                .from("onboarding_sessions")
+                .update({ status: "completed" })
+                .eq("id", body.sessionId)
+                .select("id");
 
         if (sessionUpdateError) {
             console.error(
@@ -162,6 +163,14 @@ export async function POST(request: NextRequest) {
                 { status: 404 }
             );
         }
+
+        trackEvent({
+            supabase,
+            userId,
+            eventType: "onboarding_completed",
+            payload: { goalId: body.goalId, cefrLevel },
+            requestId: generateRequestId(),
+        });
 
         return NextResponse.json({ cefrLevel, explanation });
     } catch (err) {
