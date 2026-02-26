@@ -145,6 +145,26 @@
         "failed": "Не пройдено — попробуйте снова",
         "scoreText": "{correct}/{total} правильно ({pct}%)"
     },
+    "admin": {
+        "title": "Админ",
+        "forbidden": "Доступ запрещён.",
+        "tabOverview": "Обзор",
+        "tabUsers": "Пользователи",
+        "tabEvents": "События",
+        "tabAiLogs": "AI Логи",
+        "events24h": "События (24ч)",
+        "noEvents": "Нет событий за последние 24 часа.",
+        "colEmail": "Email",
+        "colPlan": "План",
+        "colCreated": "Создано",
+        "colType": "Тип",
+        "colPayload": "Данные",
+        "colTask": "Задача",
+        "colModel": "Модель",
+        "colTokens": "Вх/Вых токены",
+        "colLatency": "Задержка",
+        "colStatus": "Статус"
+    },
     "settings": {
         "title": "Настройки",
         "language": "Язык",

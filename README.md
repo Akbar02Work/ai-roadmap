@@ -46,16 +46,48 @@ Apply migrations in this exact order after the base schema exists:
 5. `supabase/migrations/0005_roadmap_idempotency.sql` - adds roadmap generation idempotency `(goal_id, idempotency_key)` and dedupe returns.
 6. `supabase/migrations/0006_node_progress_rpc.sql` - adds node completion RPC for status transitions.
 7. `supabase/migrations/0007_node_progress_hardening.sql` - hardens node progress RPC + enforces single active node per roadmap.
+8. `supabase/migrations/0008_daily_progress.sql` - daily practice progress table + `log_practice_v1` RPC.
+9. `supabase/migrations/0009_reviews_srs.sql` - SRS review columns on roadmap_nodes + `review_node_v1` RPC.
+10. `supabase/migrations/0010_phase6_rpc_hardening.sql` - hardens phase 6 RPCs.
+11. `supabase/migrations/0011_ai_logs_request_id.sql` - adds `ai_logs.request_id` index for request-level correlation.
+12. `supabase/migrations/0012_admin_rpc.sql` - adds `admin_users` and admin-only SECURITY DEFINER RPCs for cross-user observability reads.
+13. `supabase/migrations/0013_admin_users_rpc_hotfix.sql` - updates `rpc_admin_users` to read from `profiles` schema safely.
+14. `supabase/migrations/0014_profiles_email_admin_users.sql` - mirrors email into `profiles` and updates admin users RPC to return real emails.
 
 Recommended apply methods:
 
-1. Supabase SQL Editor: run each migration file in order (`0001` -> `0002` -> `0003` -> `0004` -> `0005` -> `0006` -> `0007`).
+1. Supabase SQL Editor: run each migration file in order (`0001` -> ... -> `0014`).
 2. Supabase CLI (if configured): `supabase db push` from the project root.
 
 `0003` through `0007` are mandatory for onboarding-to-progress flow:
 - `0003`: signup/profile invariants.
 - `0004` + `0005`: roadmap atomicity and idempotent generation.
 - `0006` + `0007`: safe node status transitions and single-active-node integrity.
+- `0008` + `0009` + `0010`: daily progress tracking and SRS reviews.
+- `0011` + `0012` + `0013` + `0014`: observability and admin features.
+
+### Admin Users (DB Source of Truth)
+
+Admin observability RPCs check `auth.uid()` against `public.admin_users`.
+
+Add an admin manually in Supabase SQL Editor:
+
+```sql
+insert into public.admin_users (user_id)
+values ('<admin-user-uuid>')
+on conflict (user_id) do nothing;
+```
+
+Remove admin:
+
+```sql
+delete from public.admin_users
+where user_id = '<admin-user-uuid>';
+```
+
+Notes:
+- Keep `ADMIN_USER_IDS` env for app/UI route guard.
+- DB RPC authorization uses `public.admin_users` (not env vars).
 
 ### Roadmap Generate Idempotency Contract
 
@@ -78,7 +110,7 @@ Why: protects against duplicate clicks, retries, and parallel tabs creating extr
 
 Before promoting to staging/production, verify all items:
 
-1. Migrations applied in order: `0001_rls.sql` -> `0002_usage_rpc.sql` -> `0003_profiles_trigger.sql` -> `0004_roadmap_atomic.sql` -> `0005_roadmap_idempotency.sql` -> `0006_node_progress_rpc.sql` -> `0007_node_progress_hardening.sql`.
+1. Migrations applied in order: `0001_rls.sql` -> ... -> `0014_profiles_email_admin_users.sql`.
 2. Supabase env is set:
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`

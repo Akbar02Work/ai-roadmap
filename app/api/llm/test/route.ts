@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod/v4";
 import { requireAuth, AuthError } from "@/lib/auth";
 import { callLLMStructured, LLMError, checkRateLimit } from "@/lib/llm";
+import { generateRequestId } from "@/lib/observability/track-event";
 import { QuizOutputSchema } from "@/lib/schemas/quiz";
 import {
     buildPrompt,
@@ -27,6 +28,7 @@ const RequestBodySchema = z.object({
 export async function POST(request: NextRequest) {
     try {
         const { userId, supabase } = await requireAuth();
+        const requestId = generateRequestId();
 
         // 0. Strict rate limit on this endpoint (expensive)
         const rl = await checkRateLimit(userId, /* strict */ true);
@@ -72,7 +74,7 @@ export async function POST(request: NextRequest) {
                 messages,
             },
             QuizOutputSchema,
-            { userId, supabase }
+            { userId, supabase, requestId }
         );
 
         return NextResponse.json(result, { status: 200 });

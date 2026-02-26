@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod/v4";
 import { requireAuth, AuthError } from "@/lib/auth";
+import { trackEvent, generateRequestId } from "@/lib/observability/track-event";
 import { callLLMStructured, LLMError } from "@/lib/llm";
 import { DiagnoseResultSchema } from "@/lib/schemas/onboarding";
 import {
@@ -39,6 +40,7 @@ const RequestBodySchema = z.object({
 export async function POST(request: NextRequest) {
     try {
         const { userId, supabase } = await requireAuth();
+        const requestId = generateRequestId();
 
         const raw = await request.json();
         const body = RequestBodySchema.parse(raw);
@@ -106,7 +108,7 @@ export async function POST(request: NextRequest) {
                 messages,
             },
             DiagnoseResultSchema,
-            { userId, supabase }
+            { userId, supabase, requestId }
         );
 
         const { cefrLevel, explanation } = result.data;
@@ -140,10 +142,10 @@ export async function POST(request: NextRequest) {
         // Mark session as completed
         const { data: updatedSessions, error: sessionUpdateError } =
             await supabase
-            .from("onboarding_sessions")
-            .update({ status: "completed" })
-            .eq("id", body.sessionId)
-            .select("id");
+                .from("onboarding_sessions")
+                .update({ status: "completed" })
+                .eq("id", body.sessionId)
+                .select("id");
 
         if (sessionUpdateError) {
             console.error(
@@ -162,6 +164,14 @@ export async function POST(request: NextRequest) {
                 { status: 404 }
             );
         }
+
+        await trackEvent({
+            supabase,
+            userId,
+            eventType: "onboarding_completed",
+            payload: { goalId: body.goalId, cefrLevel },
+            requestId,
+        });
 
         return NextResponse.json({ cefrLevel, explanation });
     } catch (err) {

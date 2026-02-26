@@ -46,6 +46,7 @@ export type LLMDatabase = any;
 export interface CallLLMContext {
     userId: string;
     supabase: SupabaseClient<LLMDatabase>;
+    requestId: string;
 }
 
 export interface CallLLMResult<T = string> {
