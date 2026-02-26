@@ -44,13 +44,38 @@ Apply migrations in this exact order after the base schema exists:
 3. `supabase/migrations/0003_profiles_trigger.sql` - adds signup profile auto-create trigger, backfills missing profiles, and adds `profiles_insert_own` hardening policy.
 4. `supabase/migrations/0004_roadmap_atomic.sql` - adds atomic roadmap generation RPC with per-goal serialization.
 5. `supabase/migrations/0005_roadmap_idempotency.sql` - adds roadmap generation idempotency `(goal_id, idempotency_key)` and dedupe returns.
+6. `supabase/migrations/0011_ai_logs_request_id.sql` - adds `ai_logs.request_id` index for request-level correlation.
+7. `supabase/migrations/0012_admin_rpc.sql` - adds `admin_users` and admin-only SECURITY DEFINER RPCs for cross-user observability reads.
 
 Recommended apply methods:
 
-1. Supabase SQL Editor: run each migration file in order (`0001` -> `0002` -> `0003` -> `0004` -> `0005`).
+1. Supabase SQL Editor: run each migration file in order (`0001` -> `0002` -> `0003` -> `0004` -> `0005` -> `0011` -> `0012`).
 2. Supabase CLI (if configured): `supabase db push` from the project root.
 
-`0003`, `0004`, and `0005` are mandatory for onboarding-to-roadmap flow. Without them, user profile invariants and roadmap generation guarantees (atomicity + idempotency) are not enforced.
+`0003`, `0004`, and `0005` are mandatory for onboarding-to-roadmap flow. `0011` and `0012` are mandatory for observability/admin features.
+
+### Admin Users (DB Source of Truth)
+
+Admin observability RPCs check `auth.uid()` against `public.admin_users`.
+
+Add an admin manually in Supabase SQL Editor:
+
+```sql
+insert into public.admin_users (user_id)
+values ('<admin-user-uuid>')
+on conflict (user_id) do nothing;
+```
+
+Remove admin:
+
+```sql
+delete from public.admin_users
+where user_id = '<admin-user-uuid>';
+```
+
+Notes:
+- Keep `ADMIN_USER_IDS` env for app/UI route guard.
+- DB RPC authorization uses `public.admin_users` (not env vars).
 
 ### Roadmap Generate Idempotency Contract
 
@@ -73,7 +98,7 @@ Why: protects against duplicate clicks, retries, and parallel tabs creating extr
 
 Before promoting to staging/production, verify all items:
 
-1. Migrations applied in order: `0001_rls.sql` -> `0002_usage_rpc.sql` -> `0003_profiles_trigger.sql` -> `0004_roadmap_atomic.sql` -> `0005_roadmap_idempotency.sql`.
+1. Migrations applied in order: `0001_rls.sql` -> `0002_usage_rpc.sql` -> `0003_profiles_trigger.sql` -> `0004_roadmap_atomic.sql` -> `0005_roadmap_idempotency.sql` -> `0011_ai_logs_request_id.sql` -> `0012_admin_rpc.sql`.
 2. Supabase env is set:
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
