@@ -11,11 +11,12 @@ datasource db {
 
 // ============================================================
 // PROFILES — linked to Supabase auth.users
-// Email lives in auth.users, NOT duplicated here.
-// Trigger on auth.users insert creates profile automatically.
+// Email is mirrored from auth.users for admin observability views.
+// Trigger on auth.users insert creates/updates profile automatically.
 // ============================================================
 model Profile {
   id               String   @id @db.Uuid
+  email            String?
   displayName      String?  @map("display_name")
   avatarUrl        String?  @map("avatar_url")
   locale           String   @default("en")

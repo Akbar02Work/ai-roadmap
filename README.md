@@ -47,10 +47,11 @@ Apply migrations in this exact order after the base schema exists:
 6. `supabase/migrations/0011_ai_logs_request_id.sql` - adds `ai_logs.request_id` index for request-level correlation.
 7. `supabase/migrations/0012_admin_rpc.sql` - adds `admin_users` and admin-only SECURITY DEFINER RPCs for cross-user observability reads.
 8. `supabase/migrations/0013_admin_users_rpc_hotfix.sql` - updates `rpc_admin_users` to read from `profiles` schema safely.
+9. `supabase/migrations/0014_profiles_email_admin_users.sql` - mirrors email into `profiles` and updates admin users RPC to return real emails.
 
 Recommended apply methods:
 
-1. Supabase SQL Editor: run each migration file in order (`0001` -> `0002` -> `0003` -> `0004` -> `0005` -> `0011` -> `0012` -> `0013`).
+1. Supabase SQL Editor: run each migration file in order (`0001` -> `0002` -> `0003` -> `0004` -> `0005` -> `0011` -> `0012` -> `0013` -> `0014`).
 2. Supabase CLI (if configured): `supabase db push` from the project root.
 
 `0003`, `0004`, and `0005` are mandatory for onboarding-to-roadmap flow. `0011` and `0012` are mandatory for observability/admin features.
@@ -99,7 +100,7 @@ Why: protects against duplicate clicks, retries, and parallel tabs creating extr
 
 Before promoting to staging/production, verify all items:
 
-1. Migrations applied in order: `0001_rls.sql` -> `0002_usage_rpc.sql` -> `0003_profiles_trigger.sql` -> `0004_roadmap_atomic.sql` -> `0005_roadmap_idempotency.sql` -> `0011_ai_logs_request_id.sql` -> `0012_admin_rpc.sql` -> `0013_admin_users_rpc_hotfix.sql`.
+1. Migrations applied in order: `0001_rls.sql` -> `0002_usage_rpc.sql` -> `0003_profiles_trigger.sql` -> `0004_roadmap_atomic.sql` -> `0005_roadmap_idempotency.sql` -> `0011_ai_logs_request_id.sql` -> `0012_admin_rpc.sql` -> `0013_admin_users_rpc_hotfix.sql` -> `0014_profiles_email_admin_users.sql`.
 2. Supabase env is set:
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
