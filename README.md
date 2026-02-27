@@ -55,10 +55,11 @@ Apply migrations in this exact order after the base schema exists:
 14. `supabase/migrations/0014_profiles_email_admin_users.sql` - mirrors email into `profiles` and updates admin users RPC to return real emails.
 15. `supabase/migrations/0015_stripe_webhook_idempotency.sql` - idempotent webhook event log + unique constraint on `subscriptions.stripe_sub_id`.
 16. `supabase/migrations/0016_stripe_webhook_events_status.sql` - webhook event lifecycle fields (`processing`/`succeeded`/`failed`) for retry-safe processing.
+17. `supabase/migrations/0017_subscriptions_rls_hardening.sql` - hardens `subscriptions` RLS to user read-only; subscription writes are webhook-owned.
 
 Recommended apply methods:
 
-1. Supabase SQL Editor: run each migration file in order (`0001` -> ... -> `0016`).
+1. Supabase SQL Editor: run each migration file in order (`0001` -> ... -> `0017`).
 2. Supabase CLI (if configured): `supabase db push` from the project root.
 
 `0003` through `0007` are mandatory for onboarding-to-progress flow:
@@ -68,6 +69,7 @@ Recommended apply methods:
 - `0008` + `0009` + `0010`: daily progress tracking and SRS reviews.
 - `0011` + `0012` + `0013` + `0014`: observability and admin features.
 - `0015` + `0016`: Stripe webhook idempotency, lifecycle status, and subscription uniqueness.
+- `0017`: `subscriptions` is now read-only for authenticated users; INSERT/UPDATE/DELETE are denied and state changes must come from the Stripe webhook processing path.
 
 Stripe note:
 - `0015` enables RLS on `stripe_webhook_events` but intentionally does not add policies.
@@ -117,7 +119,7 @@ Why: protects against duplicate clicks, retries, and parallel tabs creating extr
 
 Before promoting to staging/production, verify all items:
 
-1. Migrations applied in order: `0001_rls.sql` -> ... -> `0016_stripe_webhook_events_status.sql`.
+1. Migrations applied in order: `0001_rls.sql` -> ... -> `0017_subscriptions_rls_hardening.sql`.
 2. Supabase env is set:
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`

@@ -15,6 +15,8 @@ export async function GET() {
             .from("subscriptions")
             .select("plan, status, stripe_sub_id, current_period_start, current_period_end, created_at")
             .eq("user_id", userId)
+            .eq("status", "active")
+            .not("stripe_sub_id", "is", null)
             .order("created_at", { ascending: false })
             .limit(1)
             .maybeSingle();

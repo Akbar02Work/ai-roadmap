@@ -92,6 +92,7 @@ async function getUserPlanWithSupabase(ctx: CallLLMContext): Promise<Plan> {
         .select("plan")
         .eq("user_id", ctx.userId)
         .eq("status", "active")
+        .not("stripe_sub_id", "is", null)
         .order("created_at", { ascending: false })
         .limit(1);
 
