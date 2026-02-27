@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
         process.env.NODE_ENV === "production" &&
         process.env.ENABLE_LLM_TEST_ENDPOINT !== "true"
     ) {
-        return NextResponse.json({ error: "Not found" }, { status: 404 });
+        return safeErrorResponse(404, "NOT_FOUND", "Not found");
     }
 
     try {

@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { prisma } from "@/lib/db";
+import { safeErrorResponse } from "@/lib/api/safe-error";
 
 export const runtime = "nodejs";
 
@@ -161,14 +162,14 @@ export async function POST(req: NextRequest) {
         stripe = getStripe();
     } catch (err) {
         console.error("[webhook] Stripe config error:", err);
-        return NextResponse.json({ error: "Webhook not configured" }, { status: 503 });
+        return safeErrorResponse(503, "SERVICE_UNAVAILABLE", "Webhook not configured");
     }
 
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
     if (!webhookSecret) {
         console.error("[webhook] STRIPE_WEBHOOK_SECRET not set");
-        return NextResponse.json({ error: "Webhook not configured" }, { status: 503 });
+        return safeErrorResponse(503, "SERVICE_UNAVAILABLE", "Webhook not configured");
     }
 
     // 1. Verify signature
@@ -176,7 +177,7 @@ export async function POST(req: NextRequest) {
     const sig = req.headers.get("stripe-signature");
 
     if (!sig) {
-        return NextResponse.json({ error: "Missing signature" }, { status: 400 });
+        return safeErrorResponse(400, "VALIDATION_ERROR", "Missing signature");
     }
 
     let event: Stripe.Event;
@@ -184,7 +185,7 @@ export async function POST(req: NextRequest) {
         event = stripe.webhooks.constructEvent(body, sig, webhookSecret);
     } catch (err) {
         console.error("[webhook] Signature verification failed:", err instanceof Error ? err.message : err);
-        return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
+        return safeErrorResponse(400, "VALIDATION_ERROR", "Invalid signature");
     }
 
     // 2. Event lifecycle + idempotency
@@ -193,7 +194,7 @@ export async function POST(req: NextRequest) {
         eventStatus = await markEventProcessing(event.id);
     } catch (err) {
         console.error("[webhook] Failed to initialize idempotency state:", err);
-        return NextResponse.json({ error: "Webhook idempotency unavailable" }, { status: 500 });
+        return safeErrorResponse(500, "INTERNAL_ERROR", "Webhook idempotency unavailable");
     }
 
     if (eventStatus === "succeeded") {
@@ -224,14 +225,14 @@ export async function POST(req: NextRequest) {
         } catch (statusErr) {
             console.error("[webhook] Failed to mark event as failed:", statusErr);
         }
-        return NextResponse.json({ error: "Webhook processing failed" }, { status: 500 });
+        return safeErrorResponse(500, "INTERNAL_ERROR", "Webhook processing failed");
     }
 
     try {
         await markEventSucceeded(event.id);
     } catch (err) {
         console.error("[webhook] Failed to finalize webhook event status:", err);
-        return NextResponse.json({ error: "Webhook status update failed" }, { status: 500 });
+        return safeErrorResponse(500, "INTERNAL_ERROR", "Webhook status update failed");
     }
 
     return NextResponse.json({ received: true });

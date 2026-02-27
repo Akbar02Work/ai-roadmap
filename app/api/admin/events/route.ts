@@ -56,10 +56,10 @@ export async function GET(request: NextRequest) {
 
         if (error) {
             if (error.code === "42501") {
-                return NextResponse.json({ error: "Admin access denied" }, { status: 403 });
+                return safeErrorResponse(403, "FORBIDDEN", "Admin access denied");
             }
             console.error("[admin/events] query error:", error);
-            return NextResponse.json({ error: "Failed to fetch events" }, { status: 503 });
+            return safeErrorResponse(503, "SERVICE_UNAVAILABLE", "Failed to fetch events");
         }
 
         const payload =

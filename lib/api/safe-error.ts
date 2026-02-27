@@ -12,6 +12,7 @@ export type ApiErrorCode =
     // Auth
     | "AUTH_REQUIRED"
     | "AUTH_UNAVAILABLE"
+    | "FORBIDDEN"
     // Validation
     | "VALIDATION_ERROR"
     // LLM

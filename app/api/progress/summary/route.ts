@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
         const goalId = searchParams.get("goalId");
 
         if (!goalId) {
-            return NextResponse.json({ error: "goalId is required" }, { status: 400 });
+            return safeErrorResponse(400, "VALIDATION_ERROR", "goalId is required");
         }
 
         // Verify goal ownership (RLS handles this, but explicit for clarity)
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
             .single();
 
         if (goalError || !goal) {
-            return NextResponse.json({ error: "Goal not found" }, { status: 404 });
+            return safeErrorResponse(404, "NOT_FOUND", "Goal not found");
         }
 
         // Get last 7 days of progress
@@ -45,13 +45,14 @@ export async function GET(request: NextRequest) {
         if (seriesError) {
             // Table might not exist (migration not applied)
             if (seriesError.code === "42P01") {
-                return NextResponse.json(
-                    { error: "Progress migration not applied (0008_daily_progress.sql)." },
-                    { status: 503 }
+                return safeErrorResponse(
+                    503,
+                    "MIGRATION_MISSING",
+                    "Progress migration not applied (0008_daily_progress.sql)."
                 );
             }
             console.error("[progress/summary] series error:", seriesError);
-            return NextResponse.json({ error: "Failed to fetch progress" }, { status: 503 });
+            return safeErrorResponse(503, "SERVICE_UNAVAILABLE", "Failed to fetch progress");
         }
 
         // Build 7-day series (fill gaps with 0)

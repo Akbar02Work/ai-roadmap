@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
         const goalId = searchParams.get("goalId");
 
         if (!goalId) {
-            return NextResponse.json({ error: "goalId is required" }, { status: 400 });
+            return safeErrorResponse(400, "VALIDATION_ERROR", "goalId is required");
         }
 
         // Get active roadmap for this goal (RLS enforced)
@@ -49,13 +49,14 @@ export async function GET(request: NextRequest) {
             // Check if review columns don't exist yet
             const msg = `${nodesError.message ?? ""} ${nodesError.details ?? ""}`.toLowerCase();
             if (msg.includes("next_review_at") || nodesError.code === "42703") {
-                return NextResponse.json(
-                    { error: "Review migration not applied (0009_reviews_srs.sql)." },
-                    { status: 503 }
+                return safeErrorResponse(
+                    503,
+                    "MIGRATION_MISSING",
+                    "Review migration not applied (0009_reviews_srs.sql)."
                 );
             }
             console.error("[reviews/due] query error:", nodesError);
-            return NextResponse.json({ error: "Failed to fetch reviews" }, { status: 503 });
+            return safeErrorResponse(503, "SERVICE_UNAVAILABLE", "Failed to fetch reviews");
         }
 
         return NextResponse.json({ nodes: dueNodes ?? [] });
