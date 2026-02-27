@@ -5,6 +5,7 @@
 
 import { NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/auth";
+import { safeErrorResponse, safeAuthErrorResponse } from "@/lib/api/safe-error";
 
 export async function GET() {
     try {
@@ -54,15 +55,9 @@ export async function GET() {
         });
     } catch (err) {
         if (err instanceof AuthError) {
-            return NextResponse.json(
-                { error: err.message },
-                { status: err.status }
-            );
+            return safeAuthErrorResponse(err);
         }
         console.error("[dashboard] unexpected error:", err);
-        return NextResponse.json(
-            { error: "Internal server error" },
-            { status: 500 }
-        );
+        return safeErrorResponse(500, "INTERNAL_ERROR", "Internal server error");
     }
 }

@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/auth";
 import { callLLMStructured, LLMError } from "@/lib/llm";
+import { safeErrorResponse, safeAuthErrorResponse } from "@/lib/api/safe-error";
 import { generateRequestId } from "@/lib/observability/track-event";
 import {
     QuizOutputSchema,
@@ -139,10 +140,7 @@ export async function POST(
         return NextResponse.json({ quiz: quizPublic }, { status: 201 });
     } catch (err) {
         if (err instanceof AuthError) {
-            return NextResponse.json(
-                { error: err.message },
-                { status: err.status }
-            );
+            return safeAuthErrorResponse(err);
         }
         if (err instanceof LLMError) {
             const status = err.httpStatus;
@@ -154,13 +152,18 @@ export async function POST(
                         : status === 503 &&
                             err.message.includes("0002_usage_rpc.sql")
                             ? USAGE_MIGRATION_MISSING_REASON
-                        : "LLM provider unavailable. Please try again later.";
-            return NextResponse.json({ error: safeMessage }, { status });
+                            : "LLM provider unavailable. Please try again later.";
+            const code =
+                status === 429
+                    ? "LLM_RATE_LIMIT" as const
+                    : status === 403
+                        ? "LLM_USAGE_LIMIT" as const
+                        : status === 503 && err.message.includes("0002_usage_rpc.sql")
+                            ? "LLM_MIGRATION_MISSING" as const
+                            : "LLM_UNAVAILABLE" as const;
+            return safeErrorResponse(status, code, safeMessage);
         }
         console.error("[nodes/[id]/quiz] unexpected error:", err);
-        return NextResponse.json(
-            { error: "Internal server error" },
-            { status: 500 }
-        );
+        return safeErrorResponse(500, "INTERNAL_ERROR", "Internal server error");
     }
 }

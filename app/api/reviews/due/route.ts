@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/auth";
+import { safeErrorResponse, safeAuthErrorResponse } from "@/lib/api/safe-error";
 
 export async function GET(request: NextRequest) {
     try {
@@ -60,9 +61,9 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ nodes: dueNodes ?? [] });
     } catch (err) {
         if (err instanceof AuthError) {
-            return NextResponse.json({ error: err.message }, { status: err.status });
+            return safeAuthErrorResponse(err);
         }
         console.error("[reviews/due] unexpected:", err);
-        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+        return safeErrorResponse(500, "INTERNAL_ERROR", "Internal server error");
     }
 }

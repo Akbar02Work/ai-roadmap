@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod/v4";
 import { requireAuth, AuthError } from "@/lib/auth";
+import { safeErrorResponse, safeAuthErrorResponse } from "@/lib/api/safe-error";
 import { QuizOutputSchema } from "@/lib/schemas/quiz";
 
 const AttemptBodySchema = z.object({
@@ -200,21 +201,16 @@ export async function POST(
         return NextResponse.json(responseBody);
     } catch (err) {
         if (err instanceof AuthError) {
-            return NextResponse.json(
-                { error: err.message },
-                { status: err.status }
-            );
+            return safeAuthErrorResponse(err);
         }
         if (err instanceof z.ZodError) {
-            return NextResponse.json(
-                { error: `Validation error: ${err.issues.map((i) => i.message).join(", ")}` },
-                { status: 400 }
+            return safeErrorResponse(
+                400,
+                "VALIDATION_ERROR",
+                `Validation error: ${err.issues.map((i) => i.message).join(", ")}`
             );
         }
         console.error("[nodes/[id]/attempt] unexpected error:", err);
-        return NextResponse.json(
-            { error: "Internal server error" },
-            { status: 500 }
-        );
+        return safeErrorResponse(500, "INTERNAL_ERROR", "Internal server error");
     }
 }

@@ -9,6 +9,7 @@ import { trackEvent, generateRequestId } from "@/lib/observability/track-event";
 import { z } from "zod/v4";
 import { requireAuth, AuthError } from "@/lib/auth";
 import { callLLMStructured, LLMError } from "@/lib/llm";
+import { safeErrorResponse, safeAuthErrorResponse } from "@/lib/api/safe-error";
 import { RoadmapOutputSchema } from "@/lib/schemas/roadmap";
 import {
     buildPrompt,
@@ -242,15 +243,13 @@ export async function POST(request: NextRequest) {
         );
     } catch (err) {
         if (err instanceof AuthError) {
-            return NextResponse.json(
-                { error: err.message },
-                { status: err.status }
-            );
+            return safeAuthErrorResponse(err);
         }
         if (err instanceof z.ZodError) {
-            return NextResponse.json(
-                { error: `Validation error: ${err.issues.map((i) => i.message).join(", ")}` },
-                { status: 400 }
+            return safeErrorResponse(
+                400,
+                "VALIDATION_ERROR",
+                `Validation error: ${err.issues.map((i) => i.message).join(", ")}`
             );
         }
         if (err instanceof LLMError) {
@@ -260,9 +259,10 @@ export async function POST(request: NextRequest) {
                 status === 503 &&
                 err.message.includes("0002_usage_rpc.sql")
             ) {
-                return NextResponse.json(
-                    { error: USAGE_MIGRATION_MISSING_REASON },
-                    { status: 503 }
+                return safeErrorResponse(
+                    503,
+                    "LLM_MIGRATION_MISSING",
+                    USAGE_MIGRATION_MISSING_REASON
                 );
             }
 
@@ -275,18 +275,16 @@ export async function POST(request: NextRequest) {
                             ? "Rate limit backend misconfigured."
                             : "LLM provider unavailable. Please try again later.";
 
-            // Note: rate_limit_hit / usage_limit_hit events are logged
-            // at the LLM layer level, not here (supabase not in scope).
+            const code =
+                status === 429
+                    ? "LLM_RATE_LIMIT" as const
+                    : status === 403
+                        ? "LLM_USAGE_LIMIT" as const
+                        : "LLM_UNAVAILABLE" as const;
 
-            return NextResponse.json(
-                { error: safeMessage },
-                { status }
-            );
+            return safeErrorResponse(status, code, safeMessage);
         }
         console.error("[roadmap/generate] unexpected error:", err);
-        return NextResponse.json(
-            { error: "Internal server error" },
-            { status: 500 }
-        );
+        return safeErrorResponse(500, "INTERNAL_ERROR", "Internal server error");
     }
 }

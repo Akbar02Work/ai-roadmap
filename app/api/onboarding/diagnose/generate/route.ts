@@ -7,6 +7,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod/v4";
 import { requireAuth, AuthError } from "@/lib/auth";
 import { callLLMStructured, LLMError } from "@/lib/llm";
+import {
+    safeErrorResponse,
+    safeLLMErrorResponse,
+    safeAuthErrorResponse,
+} from "@/lib/api/safe-error";
 import { generateRequestId } from "@/lib/observability/track-event";
 import { DiagnoseQuestionsOutputSchema } from "@/lib/schemas/onboarding";
 import {
@@ -74,29 +79,19 @@ export async function POST(request: NextRequest) {
         });
     } catch (err) {
         if (err instanceof AuthError) {
-            return NextResponse.json(
-                { error: err.message },
-                { status: err.status }
-            );
+            return safeAuthErrorResponse(err);
         }
         if (err instanceof z.ZodError) {
-            return NextResponse.json(
-                {
-                    error: `Validation error: ${err.issues.map((i) => i.message).join(", ")}`,
-                },
-                { status: 400 }
+            return safeErrorResponse(
+                400,
+                "VALIDATION_ERROR",
+                `Validation error: ${err.issues.map((i) => i.message).join(", ")}`
             );
         }
         if (err instanceof LLMError) {
-            return NextResponse.json(
-                { error: err.message },
-                { status: err.httpStatus }
-            );
+            return safeLLMErrorResponse(err);
         }
         console.error("[onboarding/diagnose/generate] unexpected error:", err);
-        return NextResponse.json(
-            { error: "Internal server error" },
-            { status: 500 }
-        );
+        return safeErrorResponse(500, "INTERNAL_ERROR", "Internal server error");
     }
 }

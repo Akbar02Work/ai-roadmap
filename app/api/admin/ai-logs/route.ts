@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth-admin";
 import { AuthError } from "@/lib/auth";
+import { safeErrorResponse, safeAuthErrorResponse } from "@/lib/api/safe-error";
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
@@ -75,9 +76,9 @@ export async function GET(request: NextRequest) {
         });
     } catch (err) {
         if (err instanceof AuthError) {
-            return NextResponse.json({ error: err.message }, { status: err.status });
+            return safeAuthErrorResponse(err);
         }
         console.error("[admin/ai-logs] error:", err);
-        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+        return safeErrorResponse(500, "INTERNAL_ERROR", "Internal server error");
     }
 }
