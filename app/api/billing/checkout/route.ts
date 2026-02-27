@@ -20,10 +20,56 @@ const PRICE_MAP: Record<string, string | undefined> = {
     unlimited: process.env.STRIPE_PRICE_UNLIMITED,
 };
 
+type BillingErrorCode =
+    | "BILLING_INVALID_REQUEST"
+    | "BILLING_CONFIG_ERROR"
+    | "BILLING_STRIPE_ERROR"
+    | "BILLING_INTERNAL_ERROR"
+    | "BILLING_AUTH_REQUIRED"
+    | "BILLING_AUTH_UNAVAILABLE";
+
+function errorResponse(
+    status: number,
+    code: BillingErrorCode,
+    error: string
+) {
+    return NextResponse.json({ error, code }, { status });
+}
+
 function getStripe(): Stripe {
     const key = process.env.STRIPE_SECRET_KEY;
     if (!key) throw new Error("STRIPE_SECRET_KEY not set");
     return new Stripe(key, { apiVersion: "2026-01-28.clover" });
+}
+
+function getAppBaseUrl(req: NextRequest): string | null {
+    const configuredUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL;
+
+    if (configuredUrl) {
+        try {
+            return new URL(configuredUrl).origin;
+        } catch {
+            return null;
+        }
+    }
+
+    if (process.env.NODE_ENV !== "production") {
+        // Development-only fallback to request-derived origin.
+        return req.nextUrl.origin;
+    }
+
+    return null;
+}
+
+function getStripeErrorStatus(err: Stripe.errors.StripeError): number {
+    switch (err.type) {
+        case "StripeConnectionError":
+        case "StripeRateLimitError":
+        case "StripeAPIError":
+            return 503;
+        default:
+            return 502;
+    }
 }
 
 export async function POST(req: NextRequest) {
@@ -35,17 +81,19 @@ export async function POST(req: NextRequest) {
         try {
             body = CheckoutBody.parse(await req.json());
         } catch {
-            return NextResponse.json(
-                { error: "Invalid request. Provide plan: starter|pro|unlimited." },
-                { status: 400 }
+            return errorResponse(
+                400,
+                "BILLING_INVALID_REQUEST",
+                "Invalid request. Provide plan: starter|pro|unlimited."
             );
         }
 
         const priceId = PRICE_MAP[body.plan];
         if (!priceId) {
-            return NextResponse.json(
-                { error: `Price not configured for plan "${body.plan}". Set STRIPE_PRICE_${body.plan.toUpperCase()} env.` },
-                { status: 503 }
+            return errorResponse(
+                503,
+                "BILLING_CONFIG_ERROR",
+                `Price not configured for plan "${body.plan}".`
             );
         }
 
@@ -60,7 +108,7 @@ export async function POST(req: NextRequest) {
 
         if (profileError || !profile) {
             console.error("[billing/checkout] Profile load failed:", profileError?.message);
-            return NextResponse.json({ error: "Profile not found." }, { status: 500 });
+            return errorResponse(500, "BILLING_INTERNAL_ERROR", "Profile not found.");
         }
 
         let customerId = profile.stripe_customer_id as string | null;
@@ -85,14 +133,28 @@ export async function POST(req: NextRequest) {
         }
 
         // 3. Create Checkout Session
-        const origin = req.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+        const appBaseUrl = getAppBaseUrl(req);
+        if (!appBaseUrl) {
+            return errorResponse(
+                503,
+                "BILLING_CONFIG_ERROR",
+                "Billing return URL is not configured."
+            );
+        }
+
+        const successUrl = new URL(`/${body.locale}/billing`, appBaseUrl);
+        successUrl.searchParams.set("status", "success");
+
+        const cancelUrl = new URL(`/${body.locale}/billing`, appBaseUrl);
+        cancelUrl.searchParams.set("status", "cancel");
+
         const session = await stripe.checkout.sessions.create({
             mode: "subscription",
             customer: customerId,
             client_reference_id: userId,
             line_items: [{ price: priceId, quantity: 1 }],
-            success_url: `${origin}/${body.locale}/billing?status=success`,
-            cancel_url: `${origin}/${body.locale}/billing?status=cancel`,
+            success_url: successUrl.toString(),
+            cancel_url: cancelUrl.toString(),
             metadata: { userId, plan: body.plan },
             subscription_data: {
                 metadata: { userId, plan: body.plan },
@@ -102,18 +164,31 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ url: session.url });
     } catch (err) {
         if (err instanceof AuthError) {
-            return NextResponse.json({ error: err.message }, { status: err.status });
+            if (err.status === 401) {
+                return errorResponse(err.status, "BILLING_AUTH_REQUIRED", err.message);
+            }
+            return errorResponse(err.status, "BILLING_AUTH_UNAVAILABLE", err.message);
         }
         if (err instanceof Error && err.message === "STRIPE_SECRET_KEY not set") {
-            return NextResponse.json(
-                { error: "Billing service is not configured." },
-                { status: 503 }
+            return errorResponse(
+                503,
+                "BILLING_CONFIG_ERROR",
+                "Billing service is not configured."
+            );
+        }
+        if (err instanceof Stripe.errors.StripeError) {
+            console.error("[billing/checkout] Stripe error:", err.type, err.code);
+            return errorResponse(
+                getStripeErrorStatus(err),
+                "BILLING_STRIPE_ERROR",
+                "Billing provider error. Please retry later."
             );
         }
         console.error("[billing/checkout] Unexpected:", err);
-        return NextResponse.json(
-            { error: "Failed to create checkout session." },
-            { status: 500 }
+        return errorResponse(
+            500,
+            "BILLING_INTERNAL_ERROR",
+            "Failed to create checkout session."
         );
     }
 }
