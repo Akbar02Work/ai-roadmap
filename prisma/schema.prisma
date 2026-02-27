@@ -215,6 +215,10 @@ model Subscription {
 // ============================================================
 model StripeWebhookEvent {
   eventId   String   @id @map("event_id")
+  status    String   @default("processing")
+  lastError String?  @map("last_error")
+  processedAt DateTime? @map("processed_at")
+  updatedAt DateTime @default(now()) @map("updated_at")
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("stripe_webhook_events")

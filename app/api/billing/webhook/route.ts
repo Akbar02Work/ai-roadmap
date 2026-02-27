@@ -19,13 +19,20 @@ function getStripe(): Stripe {
     return new Stripe(key, { apiVersion: "2026-01-28.clover" });
 }
 
+type BillingPlan = "starter" | "pro" | "unlimited";
+type WebhookEventStatus = "processing" | "succeeded" | "failed";
+
+const VALID_BILLING_PLANS = new Set<BillingPlan>(["starter", "pro", "unlimited"]);
+
 // Map Stripe price IDs to plan names
-function priceIdToPlan(priceId: string): string {
+function priceIdToPlan(priceId: string): BillingPlan | null {
     const map: Record<string, string> = {};
     if (process.env.STRIPE_PRICE_STARTER) map[process.env.STRIPE_PRICE_STARTER] = "starter";
     if (process.env.STRIPE_PRICE_PRO) map[process.env.STRIPE_PRICE_PRO] = "pro";
     if (process.env.STRIPE_PRICE_UNLIMITED) map[process.env.STRIPE_PRICE_UNLIMITED] = "unlimited";
-    return map[priceId] || "starter";
+    const plan = map[priceId];
+    if (!plan || !VALID_BILLING_PLANS.has(plan as BillingPlan)) return null;
+    return plan as BillingPlan;
 }
 
 // Map Stripe subscription status to our status
@@ -46,8 +53,117 @@ function mapStatus(stripeStatus: string): string {
     }
 }
 
+function normalizePlan(plan: string | null | undefined): BillingPlan | null {
+    if (!plan) return null;
+    if (!VALID_BILLING_PLANS.has(plan as BillingPlan)) return null;
+    return plan as BillingPlan;
+}
+
+function resolvePlan(metadataPlan: string | null | undefined, priceId: string): BillingPlan {
+    const fromMetadata = normalizePlan(metadataPlan);
+    if (fromMetadata) return fromMetadata;
+    const fromPrice = priceIdToPlan(priceId);
+    if (fromPrice) return fromPrice;
+    throw new Error("Unknown plan for subscription event");
+}
+
+function fromUnixSeconds(seconds: number | null | undefined): Date | null {
+    if (typeof seconds !== "number") return null;
+    return new Date(seconds * 1000);
+}
+
+function toSafeErrorMessage(err: unknown): string {
+    if (err instanceof Stripe.errors.StripeError) {
+        return `Stripe error: ${err.type}`;
+    }
+    if (err instanceof Error) {
+        return err.message.slice(0, 500);
+    }
+    return "Unknown webhook processing error";
+}
+
+async function markEventProcessing(eventId: string): Promise<WebhookEventStatus> {
+    const existing = await prisma.stripeWebhookEvent.findUnique({
+        where: { eventId },
+        select: { status: true },
+    });
+
+    if (!existing) {
+        try {
+            const created = await prisma.stripeWebhookEvent.create({
+                data: {
+                    eventId,
+                    status: "processing",
+                    lastError: null,
+                    processedAt: null,
+                    updatedAt: new Date(),
+                },
+                select: { status: true },
+            });
+            return created.status as WebhookEventStatus;
+        } catch (err: unknown) {
+            const code = (err as { code?: string })?.code;
+            if (code !== "P2002") throw err;
+
+            const raced = await prisma.stripeWebhookEvent.findUnique({
+                where: { eventId },
+                select: { status: true },
+            });
+            if (!raced) throw err;
+            return raced.status as WebhookEventStatus;
+        }
+    }
+
+    if (existing.status === "succeeded") {
+        return "succeeded";
+    }
+
+    const updated = await prisma.stripeWebhookEvent.update({
+        where: { eventId },
+        data: {
+            status: "processing",
+            lastError: null,
+            updatedAt: new Date(),
+        },
+        select: { status: true },
+    });
+
+    return updated.status as WebhookEventStatus;
+}
+
+async function markEventSucceeded(eventId: string): Promise<void> {
+    const now = new Date();
+    await prisma.stripeWebhookEvent.update({
+        where: { eventId },
+        data: {
+            status: "succeeded",
+            lastError: null,
+            processedAt: now,
+            updatedAt: now,
+        },
+    });
+}
+
+async function markEventFailed(eventId: string, safeError: string): Promise<void> {
+    await prisma.stripeWebhookEvent.update({
+        where: { eventId },
+        data: {
+            status: "failed",
+            lastError: safeError.slice(0, 2000),
+            updatedAt: new Date(),
+        },
+    });
+}
+
 export async function POST(req: NextRequest) {
-    const stripe = getStripe();
+    let stripe: Stripe;
+    try {
+        stripe = getStripe();
+    } catch (err) {
+        console.error("[webhook] Stripe config error:", err);
+        return NextResponse.json({ error: "Webhook not configured" }, { status: 503 });
+    }
+
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
     if (!webhookSecret) {
@@ -71,18 +187,17 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
     }
 
-    // 2. Idempotency check — skip already-processed events
+    // 2. Event lifecycle + idempotency
+    let eventStatus: WebhookEventStatus;
     try {
-        await prisma.stripeWebhookEvent.create({
-            data: { eventId: event.id },
-        });
-    } catch (err: unknown) {
-        // Unique constraint violation = already processed
-        const code = (err as { code?: string })?.code;
-        if (code === "P2002") {
-            return NextResponse.json({ received: true });
-        }
-        console.error("[webhook] Idempotency insert failed, processing anyway:", err);
+        eventStatus = await markEventProcessing(event.id);
+    } catch (err) {
+        console.error("[webhook] Failed to initialize idempotency state:", err);
+        return NextResponse.json({ error: "Webhook idempotency unavailable" }, { status: 500 });
+    }
+
+    if (eventStatus === "succeeded") {
+        return NextResponse.json({ received: true });
     }
 
     // 3. Handle events
@@ -102,9 +217,21 @@ export async function POST(req: NextRequest) {
                 break;
         }
     } catch (err) {
-        console.error(`[webhook] Error handling ${event.type}:`, err);
-        // Still return 200 to avoid infinite retries on persistent errors
-        // The idempotency log ensures we won't re-process on manual retry
+        const safeError = toSafeErrorMessage(err);
+        console.error(`[webhook] Error handling ${event.type}:`, safeError);
+        try {
+            await markEventFailed(event.id, safeError);
+        } catch (statusErr) {
+            console.error("[webhook] Failed to mark event as failed:", statusErr);
+        }
+        return NextResponse.json({ error: "Webhook processing failed" }, { status: 500 });
+    }
+
+    try {
+        await markEventSucceeded(event.id);
+    } catch (err) {
+        console.error("[webhook] Failed to finalize webhook event status:", err);
+        return NextResponse.json({ error: "Webhook status update failed" }, { status: 500 });
     }
 
     return NextResponse.json({ received: true });
@@ -118,14 +245,13 @@ async function handleCheckoutCompleted(stripe: Stripe, session: Stripe.Checkout.
     const customerId = session.customer as string | null;
 
     if (!userId || !subscriptionId) {
-        console.warn("[webhook] checkout.session.completed: missing userId or subscriptionId");
-        return;
+        throw new Error("checkout.session.completed missing userId or subscriptionId");
     }
 
     // Retrieve the full subscription to get plan details
     const subscription = await stripe.subscriptions.retrieve(subscriptionId);
     const priceId = subscription.items.data[0]?.price?.id || "";
-    const plan = session.metadata?.plan || priceIdToPlan(priceId);
+    const plan = resolvePlan(session.metadata?.plan, priceId);
 
     // Update profile with Stripe customer ID if needed
     if (customerId) {
@@ -143,12 +269,11 @@ async function handleSubscriptionChange(subscription: Stripe.Subscription) {
     const userId = subscription.metadata?.userId;
 
     if (!userId) {
-        console.warn(`[webhook] subscription ${subscription.id}: no userId in metadata, skipping`);
-        return;
+        throw new Error(`subscription ${subscription.id} missing metadata.userId`);
     }
 
     const priceId = subscription.items.data[0]?.price?.id || "";
-    const plan = subscription.metadata?.plan || priceIdToPlan(priceId);
+    const plan = resolvePlan(subscription.metadata?.plan, priceId);
 
     await upsertSubscription(userId, subscription, plan);
 }
@@ -156,15 +281,20 @@ async function handleSubscriptionChange(subscription: Stripe.Subscription) {
 async function upsertSubscription(
     userId: string,
     subscription: Stripe.Subscription,
-    plan: string
+    plan: BillingPlan
 ) {
+    const subscriptionPeriod = subscription as Stripe.Subscription & {
+        current_period_start?: number;
+        current_period_end?: number;
+    };
+
     const data = {
         userId,
         plan,
         status: mapStatus(subscription.status),
         stripeSubId: subscription.id,
-        currentPeriodStart: new Date(subscription.items.data[0]?.current_period_start ?? Date.now()),
-        currentPeriodEnd: new Date(subscription.items.data[0]?.current_period_end ?? Date.now()),
+        currentPeriodStart: fromUnixSeconds(subscriptionPeriod.current_period_start),
+        currentPeriodEnd: fromUnixSeconds(subscriptionPeriod.current_period_end),
     };
 
     // Try to find existing subscription by stripe_sub_id

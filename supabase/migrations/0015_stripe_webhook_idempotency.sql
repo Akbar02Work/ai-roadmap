@@ -8,11 +8,9 @@ create table if not exists public.stripe_webhook_events (
     created_at timestamptz not null default now()
 );
 
--- Allow anyone authenticated to insert (webhook uses Prisma, but keep RLS for safety)
+-- Keep RLS enabled for defense in depth.
+-- No policies are defined here because webhook writes use Prisma (DB role / owner path, not Supabase RLS session).
 alter table public.stripe_webhook_events enable row level security;
-
--- No RLS policy needed — webhook uses Prisma (bypasses RLS).
--- If future code needs RLS access, add policies here.
 
 -- 2. Unique constraint: one subscription row per Stripe subscription id
 -- Partial unique: only for non-null stripe_sub_id
