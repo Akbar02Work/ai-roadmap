@@ -54,17 +54,11 @@ export async function POST(
             .single();
 
         if (nodeError || !node) {
-            return NextResponse.json(
-                { error: "Node not found" },
-                { status: 404 }
-            );
+            return safeErrorResponse(404, "NOT_FOUND", "Node not found");
         }
 
         if (node.status !== "active" && node.status !== "completed") {
-            return NextResponse.json(
-                { error: "node_not_active" },
-                { status: 400 }
-            );
+            return safeErrorResponse(400, "VALIDATION_ERROR", "node_not_active");
         }
 
         const content = (node.content as Record<string, unknown>) ?? {};
@@ -72,33 +66,37 @@ export async function POST(
         const quizParsed = QuizOutputSchema.safeParse(quizCandidate);
 
         if (!quizParsed.success) {
-            return NextResponse.json(
-                { error: "Quiz data is invalid. Generate quiz again." },
-                { status: 400 }
+            return safeErrorResponse(
+                400,
+                "VALIDATION_ERROR",
+                "Quiz data is invalid. Generate quiz again."
             );
         }
 
         const quiz = quizParsed.data;
         if (!quiz.questions.length) {
-            return NextResponse.json(
-                { error: "No quiz found. Generate one first." },
-                { status: 400 }
+            return safeErrorResponse(
+                400,
+                "VALIDATION_ERROR",
+                "No quiz found. Generate one first."
             );
         }
 
         // 2. Score
         const totalQ = quiz.questions.length;
         if (body.answers.length !== totalQ) {
-            return NextResponse.json(
-                { error: `Expected ${totalQ} answers, got ${body.answers.length}` },
-                { status: 400 }
+            return safeErrorResponse(
+                400,
+                "VALIDATION_ERROR",
+                `Expected ${totalQ} answers, got ${body.answers.length}`
             );
         }
         const answeredAll = body.answers.every((answer) => typeof answer === "number");
         if (!answeredAll) {
-            return NextResponse.json(
-                { error: "All quiz questions must be answered before submitting." },
-                { status: 400 }
+            return safeErrorResponse(
+                400,
+                "VALIDATION_ERROR",
+                "All quiz questions must be answered before submitting."
             );
         }
 
@@ -106,15 +104,17 @@ export async function POST(
         for (let i = 0; i < totalQ; i++) {
             const answer = body.answers[i];
             if (typeof answer !== "number") {
-                return NextResponse.json(
-                    { error: `Missing answer at question ${i + 1}` },
-                    { status: 400 }
+                return safeErrorResponse(
+                    400,
+                    "VALIDATION_ERROR",
+                    `Missing answer at question ${i + 1}`
                 );
             }
             if (answer < 0 || answer >= quiz.questions[i].options.length) {
-                return NextResponse.json(
-                    { error: `Answer index out of range at question ${i + 1}` },
-                    { status: 400 }
+                return safeErrorResponse(
+                    400,
+                    "VALIDATION_ERROR",
+                    `Answer index out of range at question ${i + 1}`
                 );
             }
             if (answer === quiz.questions[i].correctIndex) {
@@ -136,23 +136,26 @@ export async function POST(
 
             if (rpcError) {
                 if (isMissingCompleteNodeRpc(rpcError)) {
-                    return NextResponse.json(
-                        { error: NODE_PROGRESS_MIGRATION_MISSING_REASON },
-                        { status: 503 }
+                    return safeErrorResponse(
+                        503,
+                        "MIGRATION_MISSING",
+                        NODE_PROGRESS_MIGRATION_MISSING_REASON
                     );
                 }
 
                 if (rpcError.code === "22023") {
-                    return NextResponse.json(
-                        { error: "node_not_active" },
-                        { status: 400 }
+                    return safeErrorResponse(
+                        400,
+                        "VALIDATION_ERROR",
+                        "node_not_active"
                     );
                 }
 
                 console.error("[nodes/[id]/attempt] complete_node_v1 error:", rpcError);
-                return NextResponse.json(
-                    { error: NODE_PROGRESS_UNAVAILABLE_REASON },
-                    { status: 503 }
+                return safeErrorResponse(
+                    503,
+                    "SERVICE_UNAVAILABLE",
+                    NODE_PROGRESS_UNAVAILABLE_REASON
                 );
             }
 
@@ -176,10 +179,7 @@ export async function POST(
 
         if (attemptError) {
             console.error("[nodes/[id]/attempt] attempt insert error:", attemptError);
-            return NextResponse.json(
-                { error: "Failed to save attempt" },
-                { status: 500 }
-            );
+            return safeErrorResponse(500, "INTERNAL_ERROR", "Failed to save attempt");
         }
 
         const responseBody: {

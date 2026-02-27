@@ -40,10 +40,7 @@ export async function POST(request: NextRequest) {
             .single();
 
         if (goalError || !goal) {
-            return NextResponse.json(
-                { error: "Goal not found" },
-                { status: 404 }
-            );
+            return safeErrorResponse(404, "NOT_FOUND", "Goal not found");
         }
 
         const diagnosis = (goal.diagnosis as Record<string, unknown>) ?? {};

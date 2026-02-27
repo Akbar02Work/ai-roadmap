@@ -32,10 +32,7 @@ export async function POST() {
 
         if (goalError) {
             console.error("[onboarding/start] goal insert error:", goalError);
-            return NextResponse.json(
-                { error: "Failed to create goal" },
-                { status: 500 }
-            );
+            return safeErrorResponse(500, "INTERNAL_ERROR", "Failed to create goal");
         }
 
         // 2. Create onboarding session
@@ -53,10 +50,7 @@ export async function POST() {
                 "[onboarding/start] session insert error:",
                 sessionError
             );
-            return NextResponse.json(
-                { error: "Failed to create session" },
-                { status: 500 }
-            );
+            return safeErrorResponse(500, "INTERNAL_ERROR", "Failed to create session");
         }
 
         await trackEvent({

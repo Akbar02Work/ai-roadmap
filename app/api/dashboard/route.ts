@@ -20,10 +20,7 @@ export async function GET() {
 
         if (goalsError) {
             console.error("[dashboard] goals query error:", goalsError);
-            return NextResponse.json(
-                { error: "Failed to fetch goals" },
-                { status: 500 }
-            );
+            return safeErrorResponse(500, "INTERNAL_ERROR", "Failed to fetch goals");
         }
 
         // Fetch active roadmaps for these goals (RLS enforced through goal chain)
@@ -40,9 +37,10 @@ export async function GET() {
 
             if (roadmapsError) {
                 console.error("[dashboard] roadmaps query error:", roadmapsError);
-                return NextResponse.json(
-                    { error: "Failed to fetch roadmaps" },
-                    { status: 500 }
+                return safeErrorResponse(
+                    500,
+                    "INTERNAL_ERROR",
+                    "Failed to fetch roadmaps"
                 );
             }
 

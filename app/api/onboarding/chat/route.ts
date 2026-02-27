@@ -43,16 +43,14 @@ export async function POST(request: NextRequest) {
             .single();
 
         if (sessionError || !session) {
-            return NextResponse.json(
-                { error: "Session not found" },
-                { status: 404 }
-            );
+            return safeErrorResponse(404, "NOT_FOUND", "Session not found");
         }
 
         if (session.status === "completed") {
-            return NextResponse.json(
-                { error: "Session already completed" },
-                { status: 400 }
+            return safeErrorResponse(
+                400,
+                "VALIDATION_ERROR",
+                "Session already completed"
             );
         }
 
@@ -88,10 +86,7 @@ export async function POST(request: NextRequest) {
                 "[onboarding/chat] user message insert error:",
                 userMsgError
             );
-            return NextResponse.json(
-                { error: "Failed to save message" },
-                { status: 500 }
-            );
+            return safeErrorResponse(500, "INTERNAL_ERROR", "Failed to save message");
         }
 
         // 6. Build conversation history for LLM

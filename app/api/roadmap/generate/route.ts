@@ -106,10 +106,7 @@ export async function POST(request: NextRequest) {
             .single();
 
         if (goalError || !goal) {
-            return NextResponse.json(
-                { error: "Goal not found" },
-                { status: 404 }
-            );
+            return safeErrorResponse(404, "NOT_FOUND", "Goal not found");
         }
 
         // Extract context from goal diagnosis
@@ -177,47 +174,41 @@ export async function POST(request: NextRequest) {
                 const migrationReason = isMissingRoadmapIdempotencyUpgrade(rpcError)
                     ? ROADMAP_IDEMPOTENCY_MIGRATION_MISSING_REASON
                     : ROADMAP_MIGRATION_MISSING_REASON;
-                return NextResponse.json(
-                    { error: migrationReason },
-                    { status: 503 }
-                );
+                return safeErrorResponse(503, "MIGRATION_MISSING", migrationReason);
             }
 
             if (rpcError.code === "23505") {
-                return NextResponse.json(
-                    { error: "Roadmap generation conflict. Please retry." },
-                    { status: 409 }
+                return safeErrorResponse(
+                    409,
+                    "CONFLICT",
+                    "Roadmap generation conflict. Please retry."
                 );
             }
 
             if (rpcError.code === "22023") {
-                return NextResponse.json(
-                    { error: "Roadmap payload is invalid." },
-                    { status: 400 }
+                return safeErrorResponse(
+                    400,
+                    "VALIDATION_ERROR",
+                    "Roadmap payload is invalid."
                 );
             }
 
             if (rpcError.code === "42501") {
-                return NextResponse.json(
-                    { error: "Goal not found" },
-                    { status: 404 }
-                );
+                return safeErrorResponse(404, "NOT_FOUND", "Goal not found");
             }
 
             console.error("[roadmap/generate] generate_roadmap_v1 rpc error:", rpcError);
-            return NextResponse.json(
-                { error: "Failed to create roadmap" },
-                { status: 503 }
+            return safeErrorResponse(
+                503,
+                "SERVICE_UNAVAILABLE",
+                "Failed to create roadmap"
             );
         }
 
         const result = extractGenerateRoadmapResult(rpcData);
         if (!result) {
             console.error("[roadmap/generate] RPC returned invalid roadmap result:", rpcData);
-            return NextResponse.json(
-                { error: "Failed to create roadmap" },
-                { status: 500 }
-            );
+            return safeErrorResponse(500, "INTERNAL_ERROR", "Failed to create roadmap");
         }
 
         await trackEvent({

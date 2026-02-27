@@ -54,10 +54,7 @@ export async function POST(
             .single();
 
         if (nodeError || !node) {
-            return NextResponse.json(
-                { error: "Node not found" },
-                { status: 404 }
-            );
+            return safeErrorResponse(404, "NOT_FOUND", "Node not found");
         }
 
         // Check if quiz already exists

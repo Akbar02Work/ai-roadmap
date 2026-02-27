@@ -43,22 +43,17 @@ export async function POST(request: NextRequest) {
 
         if (rpcError) {
             if (isMissingRpc(rpcError)) {
-                return NextResponse.json(
-                    { error: "Progress migration not applied (0008_daily_progress.sql)." },
-                    { status: 503 }
+                return safeErrorResponse(
+                    503,
+                    "MIGRATION_MISSING",
+                    "Progress migration not applied (0008_daily_progress.sql)."
                 );
             }
             if (rpcError.code === "42501") {
-                return NextResponse.json(
-                    { error: "Goal not found" },
-                    { status: 404 }
-                );
+                return safeErrorResponse(404, "NOT_FOUND", "Goal not found");
             }
             console.error("[progress/log] rpc error:", rpcError);
-            return NextResponse.json(
-                { error: "Failed to log progress" },
-                { status: 503 }
-            );
+            return safeErrorResponse(503, "SERVICE_UNAVAILABLE", "Failed to log progress");
         }
 
         const row = Array.isArray(data) ? data[0] : data;

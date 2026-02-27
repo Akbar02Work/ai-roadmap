@@ -63,17 +63,11 @@ export async function POST(request: NextRequest) {
                 "[onboarding/diagnose/submit] session ownership query error:",
                 sessionError
             );
-            return NextResponse.json(
-                { error: "Failed to verify session" },
-                { status: 500 }
-            );
+            return safeErrorResponse(500, "INTERNAL_ERROR", "Failed to verify session");
         }
 
         if (!session || session.goal_id !== body.goalId) {
-            return NextResponse.json(
-                { error: "Session not found" },
-                { status: 404 }
-            );
+            return safeErrorResponse(404, "NOT_FOUND", "Session not found");
         }
 
         // Fetch goal (RLS ensures ownership)
@@ -84,10 +78,7 @@ export async function POST(request: NextRequest) {
             .single();
 
         if (goalError || !goal) {
-            return NextResponse.json(
-                { error: "Goal not found" },
-                { status: 404 }
-            );
+            return safeErrorResponse(404, "NOT_FOUND", "Goal not found");
         }
 
         const diagnosis = (goal.diagnosis as Record<string, unknown>) ?? {};
@@ -138,10 +129,7 @@ export async function POST(request: NextRequest) {
                 "[onboarding/diagnose/submit] goal update error:",
                 goalUpdateError
             );
-            return NextResponse.json(
-                { error: "Failed to update goal" },
-                { status: 500 }
-            );
+            return safeErrorResponse(500, "INTERNAL_ERROR", "Failed to update goal");
         }
 
         // Mark session as completed
@@ -157,17 +145,11 @@ export async function POST(request: NextRequest) {
                 "[onboarding/diagnose/submit] session update error:",
                 sessionUpdateError
             );
-            return NextResponse.json(
-                { error: "Failed to update session" },
-                { status: 500 }
-            );
+            return safeErrorResponse(500, "INTERNAL_ERROR", "Failed to update session");
         }
 
         if (!updatedSessions || updatedSessions.length !== 1) {
-            return NextResponse.json(
-                { error: "Session not found" },
-                { status: 404 }
-            );
+            return safeErrorResponse(404, "NOT_FOUND", "Session not found");
         }
 
         await trackEvent({

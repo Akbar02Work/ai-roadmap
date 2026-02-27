@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { SupabaseConfigError } from "@/lib/supabase/env";
+import { safeErrorResponse } from "@/lib/api/safe-error";
 
 const SUPPORTED_LOCALES = ["en", "ru"] as const;
 type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
@@ -88,9 +89,10 @@ export async function GET(request: NextRequest) {
             }
         } catch (error) {
             if (error instanceof SupabaseConfigError) {
-                return NextResponse.json(
-                    { error: "Authentication service unavailable." },
-                    { status: 503 }
+                return safeErrorResponse(
+                    503,
+                    "SERVICE_UNAVAILABLE",
+                    "Authentication service unavailable."
                 );
             }
             console.error("[auth/callback] unexpected error:", error);

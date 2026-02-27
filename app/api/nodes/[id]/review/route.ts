@@ -51,28 +51,28 @@ export async function POST(
 
         if (rpcError) {
             if (isMissingReviewMigration(rpcError)) {
-                return NextResponse.json(
-                    { error: "Review migration not applied (0009_reviews_srs.sql)." },
-                    { status: 503 }
+                return safeErrorResponse(
+                    503,
+                    "MIGRATION_MISSING",
+                    "Review migration not applied (0009_reviews_srs.sql)."
                 );
             }
             if (rpcError.code === "42501") {
-                return NextResponse.json(
-                    { error: "Node not found or access denied" },
-                    { status: 404 }
+                return safeErrorResponse(
+                    404,
+                    "NOT_FOUND",
+                    "Node not found or access denied"
                 );
             }
             if (rpcError.code === "22023") {
-                return NextResponse.json(
-                    { error: "Only completed nodes can be reviewed" },
-                    { status: 400 }
+                return safeErrorResponse(
+                    400,
+                    "VALIDATION_ERROR",
+                    "Only completed nodes can be reviewed"
                 );
             }
             console.error("[nodes/[id]/review] rpc error:", rpcError);
-            return NextResponse.json(
-                { error: "Review unavailable." },
-                { status: 503 }
-            );
+            return safeErrorResponse(503, "SERVICE_UNAVAILABLE", "Review unavailable.");
         }
 
         const row = Array.isArray(data) ? data[0] : data;

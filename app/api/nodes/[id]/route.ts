@@ -43,10 +43,7 @@ export async function GET(
             .single();
 
         if (nodeError || !node) {
-            return NextResponse.json(
-                { error: "Node not found" },
-                { status: 404 }
-            );
+            return safeErrorResponse(404, "NOT_FOUND", "Node not found");
         }
 
         // Also fetch goal info for context (language, cefr_level)

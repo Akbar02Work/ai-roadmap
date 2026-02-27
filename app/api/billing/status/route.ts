@@ -24,9 +24,10 @@ export async function GET() {
 
         if (error) {
             console.error("[billing/status] DB error:", error.message);
-            return NextResponse.json(
-                { error: "Failed to load subscription." },
-                { status: 500 }
+            return safeErrorResponse(
+                500,
+                "INTERNAL_ERROR",
+                "Failed to load subscription."
             );
         }
 
