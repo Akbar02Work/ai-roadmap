@@ -5,9 +5,11 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
+import { trackEvent, generateRequestId } from "@/lib/observability/track-event";
 import { z } from "zod/v4";
 import { requireAuth, AuthError } from "@/lib/auth";
 import { callLLMStructured, LLMError } from "@/lib/llm";
+import { safeErrorResponse, safeAuthErrorResponse } from "@/lib/api/safe-error";
 import { RoadmapOutputSchema } from "@/lib/schemas/roadmap";
 import {
     buildPrompt,
@@ -90,6 +92,7 @@ function extractGenerateRoadmapResult(data: unknown): {
 export async function POST(request: NextRequest) {
     try {
         const { userId, supabase } = await requireAuth();
+        const requestId = generateRequestId();
 
         const raw = await request.json();
         const body = RequestBodySchema.parse(raw);
@@ -103,10 +106,7 @@ export async function POST(request: NextRequest) {
             .single();
 
         if (goalError || !goal) {
-            return NextResponse.json(
-                { error: "Goal not found" },
-                { status: 404 }
-            );
+            return safeErrorResponse(404, "NOT_FOUND", "Goal not found");
         }
 
         // Extract context from goal diagnosis
@@ -146,7 +146,7 @@ export async function POST(request: NextRequest) {
                 messages,
             },
             RoadmapOutputSchema,
-            { userId, supabase }
+            { userId, supabase, requestId }
         );
 
         const { roadmapTitle, summary, nodes } = llmResult.data;
@@ -174,48 +174,55 @@ export async function POST(request: NextRequest) {
                 const migrationReason = isMissingRoadmapIdempotencyUpgrade(rpcError)
                     ? ROADMAP_IDEMPOTENCY_MIGRATION_MISSING_REASON
                     : ROADMAP_MIGRATION_MISSING_REASON;
-                return NextResponse.json(
-                    { error: migrationReason },
-                    { status: 503 }
-                );
+                return safeErrorResponse(503, "MIGRATION_MISSING", migrationReason);
             }
 
             if (rpcError.code === "23505") {
-                return NextResponse.json(
-                    { error: "Roadmap generation conflict. Please retry." },
-                    { status: 409 }
+                return safeErrorResponse(
+                    409,
+                    "CONFLICT",
+                    "Roadmap generation conflict. Please retry."
                 );
             }
 
             if (rpcError.code === "22023") {
-                return NextResponse.json(
-                    { error: "Roadmap payload is invalid." },
-                    { status: 400 }
+                return safeErrorResponse(
+                    400,
+                    "VALIDATION_ERROR",
+                    "Roadmap payload is invalid."
                 );
             }
 
             if (rpcError.code === "42501") {
-                return NextResponse.json(
-                    { error: "Goal not found" },
-                    { status: 404 }
-                );
+                return safeErrorResponse(404, "NOT_FOUND", "Goal not found");
             }
 
             console.error("[roadmap/generate] generate_roadmap_v1 rpc error:", rpcError);
-            return NextResponse.json(
-                { error: "Failed to create roadmap" },
-                { status: 503 }
+            return safeErrorResponse(
+                503,
+                "SERVICE_UNAVAILABLE",
+                "Failed to create roadmap"
             );
         }
 
         const result = extractGenerateRoadmapResult(rpcData);
         if (!result) {
             console.error("[roadmap/generate] RPC returned invalid roadmap result:", rpcData);
-            return NextResponse.json(
-                { error: "Failed to create roadmap" },
-                { status: 500 }
-            );
+            return safeErrorResponse(500, "INTERNAL_ERROR", "Failed to create roadmap");
         }
+
+        await trackEvent({
+            supabase,
+            userId,
+            eventType: "roadmap_generated",
+            payload: {
+                goalId: body.goalId,
+                roadmapId: result.roadmapId,
+                deduped: result.deduped,
+                nodeCount: nodes.length,
+            },
+            requestId,
+        });
 
         return NextResponse.json(
             {
@@ -227,15 +234,13 @@ export async function POST(request: NextRequest) {
         );
     } catch (err) {
         if (err instanceof AuthError) {
-            return NextResponse.json(
-                { error: err.message },
-                { status: err.status }
-            );
+            return safeAuthErrorResponse(err);
         }
         if (err instanceof z.ZodError) {
-            return NextResponse.json(
-                { error: `Validation error: ${err.issues.map((i) => i.message).join(", ")}` },
-                { status: 400 }
+            return safeErrorResponse(
+                400,
+                "VALIDATION_ERROR",
+                `Validation error: ${err.issues.map((i) => i.message).join(", ")}`
             );
         }
         if (err instanceof LLMError) {
@@ -245,9 +250,10 @@ export async function POST(request: NextRequest) {
                 status === 503 &&
                 err.message.includes("0002_usage_rpc.sql")
             ) {
-                return NextResponse.json(
-                    { error: USAGE_MIGRATION_MISSING_REASON },
-                    { status: 503 }
+                return safeErrorResponse(
+                    503,
+                    "LLM_MIGRATION_MISSING",
+                    USAGE_MIGRATION_MISSING_REASON
                 );
             }
 
@@ -258,16 +264,18 @@ export async function POST(request: NextRequest) {
                         ? "Usage limit exceeded."
                         : status === 503 && err.message === "Rate limit backend misconfigured."
                             ? "Rate limit backend misconfigured."
-                        : "LLM provider unavailable. Please try again later.";
-            return NextResponse.json(
-                { error: safeMessage },
-                { status }
-            );
+                            : "LLM provider unavailable. Please try again later.";
+
+            const code =
+                status === 429
+                    ? "LLM_RATE_LIMIT" as const
+                    : status === 403
+                        ? "LLM_USAGE_LIMIT" as const
+                        : "LLM_UNAVAILABLE" as const;
+
+            return safeErrorResponse(status, code, safeMessage);
         }
         console.error("[roadmap/generate] unexpected error:", err);
-        return NextResponse.json(
-            { error: "Internal server error" },
-            { status: 500 }
-        );
+        return safeErrorResponse(500, "INTERNAL_ERROR", "Internal server error");
     }
 }

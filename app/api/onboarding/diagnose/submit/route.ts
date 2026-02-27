@@ -6,7 +6,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod/v4";
 import { requireAuth, AuthError } from "@/lib/auth";
+import { trackEvent, generateRequestId } from "@/lib/observability/track-event";
 import { callLLMStructured, LLMError } from "@/lib/llm";
+import {
+    safeErrorResponse,
+    safeLLMErrorResponse,
+    safeAuthErrorResponse,
+} from "@/lib/api/safe-error";
 import { DiagnoseResultSchema } from "@/lib/schemas/onboarding";
 import {
     buildScorePrompt,
@@ -39,6 +45,7 @@ const RequestBodySchema = z.object({
 export async function POST(request: NextRequest) {
     try {
         const { userId, supabase } = await requireAuth();
+        const requestId = generateRequestId();
 
         const raw = await request.json();
         const body = RequestBodySchema.parse(raw);
@@ -56,17 +63,11 @@ export async function POST(request: NextRequest) {
                 "[onboarding/diagnose/submit] session ownership query error:",
                 sessionError
             );
-            return NextResponse.json(
-                { error: "Failed to verify session" },
-                { status: 500 }
-            );
+            return safeErrorResponse(500, "INTERNAL_ERROR", "Failed to verify session");
         }
 
         if (!session || session.goal_id !== body.goalId) {
-            return NextResponse.json(
-                { error: "Session not found" },
-                { status: 404 }
-            );
+            return safeErrorResponse(404, "NOT_FOUND", "Session not found");
         }
 
         // Fetch goal (RLS ensures ownership)
@@ -77,10 +78,7 @@ export async function POST(request: NextRequest) {
             .single();
 
         if (goalError || !goal) {
-            return NextResponse.json(
-                { error: "Goal not found" },
-                { status: 404 }
-            );
+            return safeErrorResponse(404, "NOT_FOUND", "Goal not found");
         }
 
         const diagnosis = (goal.diagnosis as Record<string, unknown>) ?? {};
@@ -106,7 +104,7 @@ export async function POST(request: NextRequest) {
                 messages,
             },
             DiagnoseResultSchema,
-            { userId, supabase }
+            { userId, supabase, requestId }
         );
 
         const { cefrLevel, explanation } = result.data;
@@ -131,64 +129,53 @@ export async function POST(request: NextRequest) {
                 "[onboarding/diagnose/submit] goal update error:",
                 goalUpdateError
             );
-            return NextResponse.json(
-                { error: "Failed to update goal" },
-                { status: 500 }
-            );
+            return safeErrorResponse(500, "INTERNAL_ERROR", "Failed to update goal");
         }
 
         // Mark session as completed
         const { data: updatedSessions, error: sessionUpdateError } =
             await supabase
-            .from("onboarding_sessions")
-            .update({ status: "completed" })
-            .eq("id", body.sessionId)
-            .select("id");
+                .from("onboarding_sessions")
+                .update({ status: "completed" })
+                .eq("id", body.sessionId)
+                .select("id");
 
         if (sessionUpdateError) {
             console.error(
                 "[onboarding/diagnose/submit] session update error:",
                 sessionUpdateError
             );
-            return NextResponse.json(
-                { error: "Failed to update session" },
-                { status: 500 }
-            );
+            return safeErrorResponse(500, "INTERNAL_ERROR", "Failed to update session");
         }
 
         if (!updatedSessions || updatedSessions.length !== 1) {
-            return NextResponse.json(
-                { error: "Session not found" },
-                { status: 404 }
-            );
+            return safeErrorResponse(404, "NOT_FOUND", "Session not found");
         }
+
+        await trackEvent({
+            supabase,
+            userId,
+            eventType: "onboarding_completed",
+            payload: { goalId: body.goalId, cefrLevel },
+            requestId,
+        });
 
         return NextResponse.json({ cefrLevel, explanation });
     } catch (err) {
         if (err instanceof AuthError) {
-            return NextResponse.json(
-                { error: err.message },
-                { status: err.status }
-            );
+            return safeAuthErrorResponse(err);
         }
         if (err instanceof z.ZodError) {
-            return NextResponse.json(
-                {
-                    error: `Validation error: ${err.issues.map((i) => i.message).join(", ")}`,
-                },
-                { status: 400 }
+            return safeErrorResponse(
+                400,
+                "VALIDATION_ERROR",
+                `Validation error: ${err.issues.map((i) => i.message).join(", ")}`
             );
         }
         if (err instanceof LLMError) {
-            return NextResponse.json(
-                { error: err.message },
-                { status: err.httpStatus }
-            );
+            return safeLLMErrorResponse(err);
         }
         console.error("[onboarding/diagnose/submit] unexpected error:", err);
-        return NextResponse.json(
-            { error: "Internal server error" },
-            { status: 500 }
-        );
+        return safeErrorResponse(500, "INTERNAL_ERROR", "Internal server error");
     }
 }

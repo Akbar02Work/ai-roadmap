@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/auth";
+import { safeErrorResponse, safeAuthErrorResponse } from "@/lib/api/safe-error";
 
 export async function GET(
     _request: NextRequest,
@@ -23,10 +24,7 @@ export async function GET(
             .single();
 
         if (roadmapError || !roadmap) {
-            return NextResponse.json(
-                { error: "Roadmap not found" },
-                { status: 404 }
-            );
+            return safeErrorResponse(404, "NOT_FOUND", "Roadmap not found");
         }
 
         // Fetch nodes ordered by sort_order
@@ -38,9 +36,10 @@ export async function GET(
 
         if (nodesError) {
             console.error("[roadmap/[id]] nodes query error:", nodesError);
-            return NextResponse.json(
-                { error: "Failed to fetch roadmap nodes" },
-                { status: 500 }
+            return safeErrorResponse(
+                500,
+                "INTERNAL_ERROR",
+                "Failed to fetch roadmap nodes"
             );
         }
 
@@ -50,15 +49,9 @@ export async function GET(
         });
     } catch (err) {
         if (err instanceof AuthError) {
-            return NextResponse.json(
-                { error: err.message },
-                { status: err.status }
-            );
+            return safeAuthErrorResponse(err);
         }
         console.error("[roadmap/[id]] unexpected error:", err);
-        return NextResponse.json(
-            { error: "Internal server error" },
-            { status: 500 }
-        );
+        return safeErrorResponse(500, "INTERNAL_ERROR", "Internal server error");
     }
 }

@@ -46,6 +46,7 @@ export type LLMDatabase = any;
 export interface CallLLMContext {
     userId: string;
     supabase: SupabaseClient<LLMDatabase>;
+    requestId?: string;
 }
 
 export interface CallLLMResult<T = string> {
@@ -102,8 +103,8 @@ export const MODEL_ROUTING: Record<LLMTask, TaskRouting> = {
         fallback: { provider: "anthropic", model: "claude-sonnet-4-20250514", temperature: 0.5 },
     },
     quiz_generation: {
-        primary: { provider: "openai", model: "gpt-4.1-mini", temperature: 0.5 },
-        fallback: { provider: "anthropic", model: "claude-sonnet-4-20250514", temperature: 0.5 },
+        primary: { provider: "openrouter", model: "__OPENROUTER_MODEL__", temperature: 0.5 },
+        fallback: { provider: "openrouter", model: "__OPENROUTER_MODEL__", temperature: 0.5 },
     },
     artifact_grading: {
         primary: { provider: "openai", model: "gpt-4.1-mini", temperature: 0.2 },

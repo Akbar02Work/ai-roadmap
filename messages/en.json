@@ -85,12 +85,19 @@
     "dashboard": {
         "title": "Dashboard",
         "activeGoals": "Active Goals",
-        "streak": "Day Streak",
+        "streak": "Streak",
+        "bestStreak": "Best",
+        "todayMin": "Today min",
+        "weekMin": "Week min",
+        "chartTooltip": "{day}: {minutes} min",
         "noGoals": "No active goals yet. Start by creating one!",
         "createGoal": "Create New Goal",
         "viewRoadmap": "View Roadmap",
+        "continue": "Continue",
         "generateRoadmap": "Generate Roadmap",
-        "needsDiagnosis": "Complete onboarding first to generate a roadmap"
+        "needsDiagnosis": "Complete onboarding first to generate a roadmap",
+        "reviewDue": "Review ({count})",
+        "logMinutes": "+ 10 min"
     },
     "roadmap": {
         "title": "Your Roadmap",
@@ -114,6 +121,93 @@
         "passed": "Passed!",
         "failed": "Try Again",
         "dispute": "Dispute Result"
+    },
+    "node": {
+        "backToRoadmap": "Back to roadmap",
+        "loadError": "Failed to load node",
+        "forbidden": "You do not have access to this node",
+        "notFound": "Node not found",
+        "answeredCount": "Answered {answered}/{total}",
+        "durationMinutes": "{minutes} min",
+        "noQuizYet": "No quiz generated yet. Click the button to create one.",
+        "generateQuiz": "Generate Quiz",
+        "generatingQuiz": "Generating quiz...",
+        "generateError": "Failed to generate quiz. Please try again.",
+        "reportLabel": "Short report (what you learned, any difficulties)",
+        "reportPlaceholder": "Write a short note about your experience...",
+        "submit": "Submit",
+        "submitting": "Submitting...",
+        "submitError": "Failed to submit. Please try again.",
+        "completed": "Completed",
+        "notPassed": "Not passed",
+        "retryQuiz": "Try again",
+        "passed": "Completed! 🎉",
+        "failed": "Not passed — try again",
+        "scoreText": "{correct}/{total} correct ({pct}%)",
+        "reviewPrompt": "Quick review: did you confidently recall this node?",
+        "reviewPass": "I remembered",
+        "reviewFail": "Need repeat",
+        "reviewSubmitting": "Saving...",
+        "reviewDonePassed": "Review recorded",
+        "reviewDoneFailed": "Review scheduled sooner",
+        "nextReviewAt": "Next review: {date}",
+        "reviewScheduled": "scheduled",
+        "reviewInterval": "Interval: {days} day(s)",
+        "reviewCountText": "Successful reviews: {count}"
+    },
+    "admin": {
+        "title": "Admin",
+        "forbidden": "Admin access denied.",
+        "tabOverview": "Overview",
+        "tabUsers": "Users",
+        "tabEvents": "Events",
+        "tabAiLogs": "AI Logs",
+        "events24h": "Events (last 24h)",
+        "noEvents": "No events in the last 24 hours.",
+        "colEmail": "Email",
+        "colPlan": "Plan",
+        "colCreated": "Created",
+        "colType": "Type",
+        "colPayload": "Payload",
+        "colTask": "Task",
+        "colModel": "Model",
+        "colTokens": "In/Out Tokens",
+        "colLatency": "Latency",
+        "colStatus": "Status"
+    },
+    "billing": {
+        "title": "Billing & Plans",
+        "currentPlan": "Current plan",
+        "free": "Free",
+        "periodEnd": "Renews: {date}",
+        "loadError": "Failed to load billing info.",
+        "checkoutError": "Failed to start checkout.",
+        "checkoutSuccess": "Payment successful! Your plan has been upgraded.",
+        "checkoutCancelled": "Checkout cancelled.",
+        "redirecting": "Redirecting…",
+        "downgradeNA": "Contact support",
+        "features": {
+            "free": [
+                "10 AI messages/day",
+                "1 roadmap/month",
+                "Community support"
+            ],
+            "starter": [
+                "50 AI messages/day",
+                "3 roadmaps/month",
+                "Email support"
+            ],
+            "pro": [
+                "200 AI messages/day",
+                "10 roadmaps/month",
+                "Priority support"
+            ],
+            "unlimited": [
+                "Unlimited AI messages",
+                "Unlimited roadmaps",
+                "Priority support"
+            ]
+        }
     },
     "settings": {
         "title": "Settings",

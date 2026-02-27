@@ -152,60 +152,68 @@ export default function RoadmapPage() {
 
             {/* Node list */}
             <div className="space-y-3">
-                {nodes.map((node, index) => (
-                    <div
-                        key={node.id}
-                        className={`rounded-xl border-2 p-4 transition ${STATUS_STYLES[node.status] ?? STATUS_STYLES.locked}`}
-                    >
-                        <div className="flex items-start gap-3">
-                            {/* Index + icon */}
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted text-lg">
-                                {NODE_TYPE_ICONS[node.node_type] ?? "📄"}
-                            </div>
+                {nodes.map((node, index) => {
+                    const isClickable = node.status === "active" || node.status === "completed";
+                    return (
+                        <div
+                            key={node.id}
+                            onClick={() => {
+                                if (isClickable) {
+                                    router.push(`/${locale}/roadmap/${roadmapId}/node/${node.id}`);
+                                }
+                            }}
+                            className={`rounded-xl border-2 p-4 transition ${STATUS_STYLES[node.status] ?? STATUS_STYLES.locked} ${isClickable ? "cursor-pointer hover:shadow-md" : "cursor-not-allowed"}`}
+                        >
+                            <div className="flex items-start gap-3">
+                                {/* Index + icon */}
+                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted text-lg">
+                                    {NODE_TYPE_ICONS[node.node_type] ?? "📄"}
+                                </div>
 
-                            <div className="flex-1">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-xs text-muted-foreground">
-                                        {index + 1}
-                                    </span>
-                                    <h3 className="font-medium">
-                                        {node.title}
-                                    </h3>
-                                    <span
-                                        className={`ml-auto rounded-full px-2 py-0.5 text-xs ${node.status === "completed"
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs text-muted-foreground">
+                                            {index + 1}
+                                        </span>
+                                        <h3 className="font-medium">
+                                            {node.title}
+                                        </h3>
+                                        <span
+                                            className={`ml-auto rounded-full px-2 py-0.5 text-xs ${node.status === "completed"
                                                 ? "bg-green-500/10 text-green-600"
                                                 : node.status === "active"
                                                     ? "bg-primary/10 text-primary"
                                                     : "bg-muted text-muted-foreground"
-                                            }`}
-                                    >
-                                        {t(node.status)}
-                                    </span>
-                                </div>
-
-                                {node.description && (
-                                    <p className="mt-1 text-sm text-muted-foreground">
-                                        {node.description}
-                                    </p>
-                                )}
-
-                                <div className="mt-2 flex flex-wrap gap-2">
-                                    <span className="text-xs text-muted-foreground">
-                                        ⏱ {node.est_minutes} min
-                                    </span>
-                                    {node.skills.map((skill) => (
-                                        <span
-                                            key={skill}
-                                            className="rounded-md bg-muted px-1.5 py-0.5 text-xs"
+                                                }`}
                                         >
-                                            {skill}
+                                            {t(node.status)}
                                         </span>
-                                    ))}
+                                    </div>
+
+                                    {node.description && (
+                                        <p className="mt-1 text-sm text-muted-foreground">
+                                            {node.description}
+                                        </p>
+                                    )}
+
+                                    <div className="mt-2 flex flex-wrap gap-2">
+                                        <span className="text-xs text-muted-foreground">
+                                            ⏱ {node.est_minutes} min
+                                        </span>
+                                        {node.skills.map((skill) => (
+                                            <span
+                                                key={skill}
+                                                className="rounded-md bg-muted px-1.5 py-0.5 text-xs"
+                                            >
+                                                {skill}
+                                            </span>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         </div>
     );

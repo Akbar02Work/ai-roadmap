@@ -8,6 +8,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod/v4";
 import { requireAuth, AuthError } from "@/lib/auth";
 import { callLLMStructured, LLMError } from "@/lib/llm";
+import {
+    safeErrorResponse,
+    safeLLMErrorResponse,
+    safeAuthErrorResponse,
+} from "@/lib/api/safe-error";
+import { generateRequestId } from "@/lib/observability/track-event";
 import { OnboardingChatOutputSchema } from "@/lib/schemas/onboarding";
 import {
     buildPrompt,
@@ -23,6 +29,7 @@ const RequestBodySchema = z.object({
 export async function POST(request: NextRequest) {
     try {
         const { userId, supabase } = await requireAuth();
+        const requestId = generateRequestId();
 
         // 1. Parse request body
         const raw = await request.json();
@@ -36,16 +43,14 @@ export async function POST(request: NextRequest) {
             .single();
 
         if (sessionError || !session) {
-            return NextResponse.json(
-                { error: "Session not found" },
-                { status: 404 }
-            );
+            return safeErrorResponse(404, "NOT_FOUND", "Session not found");
         }
 
         if (session.status === "completed") {
-            return NextResponse.json(
-                { error: "Session already completed" },
-                { status: 400 }
+            return safeErrorResponse(
+                400,
+                "VALIDATION_ERROR",
+                "Session already completed"
             );
         }
 
@@ -81,10 +86,7 @@ export async function POST(request: NextRequest) {
                 "[onboarding/chat] user message insert error:",
                 userMsgError
             );
-            return NextResponse.json(
-                { error: "Failed to save message" },
-                { status: 500 }
-            );
+            return safeErrorResponse(500, "INTERNAL_ERROR", "Failed to save message");
         }
 
         // 6. Build conversation history for LLM
@@ -115,7 +117,7 @@ export async function POST(request: NextRequest) {
                 messages,
             },
             OnboardingChatOutputSchema,
-            { userId, supabase }
+            { userId, supabase, requestId }
         );
 
         const { assistantMessage, collected, nextAction } = llmResult.data;
@@ -179,29 +181,19 @@ export async function POST(request: NextRequest) {
         });
     } catch (err) {
         if (err instanceof AuthError) {
-            return NextResponse.json(
-                { error: err.message },
-                { status: err.status }
-            );
+            return safeAuthErrorResponse(err);
         }
         if (err instanceof z.ZodError) {
-            return NextResponse.json(
-                {
-                    error: `Validation error: ${err.issues.map((i) => i.message).join(", ")}`,
-                },
-                { status: 400 }
+            return safeErrorResponse(
+                400,
+                "VALIDATION_ERROR",
+                `Validation error: ${err.issues.map((i) => i.message).join(", ")}`
             );
         }
         if (err instanceof LLMError) {
-            return NextResponse.json(
-                { error: err.message },
-                { status: err.httpStatus }
-            );
+            return safeLLMErrorResponse(err);
         }
         console.error("[onboarding/chat] unexpected error:", err);
-        return NextResponse.json(
-            { error: "Internal server error" },
-            { status: 500 }
-        );
+        return safeErrorResponse(500, "INTERNAL_ERROR", "Internal server error");
     }
 }

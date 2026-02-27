@@ -6,10 +6,13 @@
 
 import { NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/auth";
+import { safeErrorResponse, safeAuthErrorResponse } from "@/lib/api/safe-error";
+import { trackEvent, generateRequestId } from "@/lib/observability/track-event";
 
 export async function POST() {
     try {
         const { userId, supabase } = await requireAuth();
+        const requestId = generateRequestId();
 
         // 1. Create goal
         const { data: goal, error: goalError } = await supabase
@@ -29,10 +32,7 @@ export async function POST() {
 
         if (goalError) {
             console.error("[onboarding/start] goal insert error:", goalError);
-            return NextResponse.json(
-                { error: "Failed to create goal" },
-                { status: 500 }
-            );
+            return safeErrorResponse(500, "INTERNAL_ERROR", "Failed to create goal");
         }
 
         // 2. Create onboarding session
@@ -50,11 +50,16 @@ export async function POST() {
                 "[onboarding/start] session insert error:",
                 sessionError
             );
-            return NextResponse.json(
-                { error: "Failed to create session" },
-                { status: 500 }
-            );
+            return safeErrorResponse(500, "INTERNAL_ERROR", "Failed to create session");
         }
+
+        await trackEvent({
+            supabase,
+            userId,
+            eventType: "onboarding_started",
+            payload: { goalId: goal.id, sessionId: session.id },
+            requestId,
+        });
 
         return NextResponse.json(
             { sessionId: session.id, goalId: goal.id },
@@ -62,15 +67,9 @@ export async function POST() {
         );
     } catch (err) {
         if (err instanceof AuthError) {
-            return NextResponse.json(
-                { error: err.message },
-                { status: err.status }
-            );
+            return safeAuthErrorResponse(err);
         }
         console.error("[onboarding/start] unexpected error:", err);
-        return NextResponse.json(
-            { error: "Internal server error" },
-            { status: 500 }
-        );
+        return safeErrorResponse(500, "INTERNAL_ERROR", "Internal server error");
     }
 }
