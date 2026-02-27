@@ -164,6 +164,91 @@ Before promoting to staging/production, verify all items:
 8. Non-authenticated user → `/api/billing/status` returns 401.
 9. Invalid plan → `/api/billing/checkout` returns `400` with `code=BILLING_INVALID_REQUEST`.
 
+## Pre-launch Checklist
+
+Before going live, verify every item:
+
+### Database Migrations (in order)
+
+Apply all migrations `0001_rls.sql` → `0017_subscriptions_rls_hardening.sql` via Supabase SQL Editor or `supabase db push`. Skipping any migration **will** cause runtime 503 errors on dependent endpoints.
+
+### Admin Setup
+
+```sql
+INSERT INTO public.admin_users (user_id)
+VALUES ('<admin-user-uuid>')
+ON CONFLICT (user_id) DO NOTHING;
+```
+
+Also set `ADMIN_USER_IDS=<uuid>` env var for UI route guard.
+
+### Stripe Webhook Setup
+
+1. Stripe Dashboard → Developers → Webhooks → Add endpoint.
+2. URL: `https://your-domain.com/api/billing/webhook`
+3. Events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`
+4. Copy signing secret → `STRIPE_WEBHOOK_SECRET`
+5. Set remaining Stripe env vars:
+   - `STRIPE_SECRET_KEY`
+   - `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_UNLIMITED`
+   - `APP_URL` (required in production for checkout return URLs)
+
+### LLM Provider Keys
+
+At least one of:
+- `OPENAI_API_KEY` (primary)
+- `ANTHROPIC_API_KEY` (fallback)
+- `OPENROUTER_API_KEY` + `OPENROUTER_MODEL` + `OPENROUTER_REFERER` + `OPENROUTER_TITLE` (onboarding)
+
+### Upstash Redis (Rate Limiting)
+
+- `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`
+- **If not set in production**: rate-limited endpoints return `503` (fail-closed).
+- **If not set in development**: in-memory fallback limiter is used (safe for local dev).
+
+### LLM Test Endpoint
+
+- `/api/llm/test` is **disabled** in production by default.
+- To enable: set `ENABLE_LLM_TEST_ENDPOINT=true`.
+- Not recommended for public-facing deployments.
+
+---
+
+## Full MVP Smoke Test
+
+End-to-end verification flow (12 steps). Run against a clean test user.
+
+| # | Step | Method | Endpoint / Action | Expected |
+|---|------|--------|-------------------|----------|
+| 1 | **Auth** | browser | Sign up / log in via Supabase Auth | Redirect to dashboard, `profiles` row created |
+| 2 | **Onboarding start** | `POST` | `/api/onboarding/start` | `201` → `{ sessionId, goalId }` |
+| 3 | **Onboarding chat** | `POST` | `/api/onboarding/chat` | `200` → assistant reply + collected fields |
+| 4 | **Diagnose generate** | `POST` | `/api/onboarding/diagnose/generate` | `200` → CEFR diagnostic questions |
+| 5 | **Diagnose submit** | `POST` | `/api/onboarding/diagnose/submit` | `200` → `{ cefrLevel, explanation }`, session completed |
+| 6 | **Roadmap generate** | `POST` | `/api/roadmap/generate` | `201` → `{ roadmapId, deduped: false }` |
+| 7 | **Node fetch + quiz** | `GET` → `POST` | `/api/nodes/[id]` → `/api/nodes/[id]/quiz` | Node data, then `201` → quiz questions |
+| 8 | **Quiz attempt** | `POST` | `/api/nodes/[id]/attempt` | Score result, node completion if passed |
+| 9 | **Daily log** | `POST` | `/api/progress/log` | `200` → streak + minutes summary |
+| 10 | **Due reviews** | `GET` | `/api/reviews/due?goalId=...` | `200` → `{ nodes: [...] }` (may be empty) |
+| 11 | **Admin check** | `GET` | `/api/admin/events` + `/api/admin/ai-logs` | `200` → paginated results (requires admin role) |
+| 12 | **Billing** | `POST` → `GET` | `/api/billing/checkout` → `/api/billing/status` | Checkout URL, then plan status |
+
+### Quick cURL Smoke (Steps 2–3)
+
+```bash
+# Step 2 — start onboarding
+curl -s -X POST http://localhost:3000/api/onboarding/start \
+  -H "Cookie: <auth-cookie>" | jq .
+
+# Step 3 — send chat message
+curl -s -X POST http://localhost:3000/api/onboarding/chat \
+  -H "Cookie: <auth-cookie>" \
+  -H "Content-Type: application/json" \
+  -d '{"sessionId":"<id>","message":"I want to learn Spanish"}' | jq .
+```
+
+---
+
 ## Phase 5 Manual Test (Node Completion Rules)
 
 Preconditions:
