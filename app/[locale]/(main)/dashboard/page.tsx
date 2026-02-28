@@ -222,90 +222,128 @@ export default function DashboardPage() {
                                 </div>
 
                                 {/* Progress stats */}
-                                {prog && (
-                                    <div className="mt-4 grid grid-cols-4 gap-3">
-                                        <div className="rounded-lg bg-muted/50 p-3 text-center">
-                                            <div className="text-2xl font-bold">
-                                                🔥 {prog.streakCurrent}
-                                            </div>
-                                            <div className="text-xs text-muted-foreground">
-                                                {t("streak")}
-                                            </div>
+                                <div className="mt-4 grid grid-cols-4 gap-3">
+                                    <div className="rounded-lg bg-muted/50 p-3 text-center">
+                                        <div className="text-2xl font-bold">
+                                            {prog ? (
+                                                `🔥 ${prog.streakCurrent}`
+                                            ) : (
+                                                <span className="animate-pulse text-muted-foreground">...</span>
+                                            )}
                                         </div>
-                                        <div className="rounded-lg bg-muted/50 p-3 text-center">
-                                            <div className="text-2xl font-bold">
-                                                ⭐ {prog.streakBest}
-                                            </div>
-                                            <div className="text-xs text-muted-foreground">
-                                                {t("bestStreak")}
-                                            </div>
-                                        </div>
-                                        <div className="rounded-lg bg-muted/50 p-3 text-center">
-                                            <div className="text-2xl font-bold">
-                                                {prog.todayMinutes}
-                                            </div>
-                                            <div className="text-xs text-muted-foreground">
-                                                {t("todayMin")}
-                                            </div>
-                                        </div>
-                                        <div className="rounded-lg bg-muted/50 p-3 text-center">
-                                            <div className="text-2xl font-bold">
-                                                {prog.weekMinutes}
-                                            </div>
-                                            <div className="text-xs text-muted-foreground">
-                                                {t("weekMin")}
-                                            </div>
+                                        <div className="text-xs text-muted-foreground">
+                                            {t("streak")}
                                         </div>
                                     </div>
-                                )}
+                                    <div className="rounded-lg bg-muted/50 p-3 text-center">
+                                        <div className="text-2xl font-bold">
+                                            {prog ? (
+                                                `⭐ ${prog.streakBest}`
+                                            ) : (
+                                                <span className="animate-pulse text-muted-foreground">...</span>
+                                            )}
+                                        </div>
+                                        <div className="text-xs text-muted-foreground">
+                                            {t("bestStreak")}
+                                        </div>
+                                    </div>
+                                    <div className="rounded-lg bg-muted/50 p-3 text-center">
+                                        <div className="text-2xl font-bold">
+                                            {prog ? (
+                                                prog.todayMinutes
+                                            ) : (
+                                                <span className="animate-pulse text-muted-foreground">...</span>
+                                            )}
+                                        </div>
+                                        <div className="text-xs text-muted-foreground">
+                                            {t("todayMin")}
+                                        </div>
+                                    </div>
+                                    <div className="rounded-lg bg-muted/50 p-3 text-center">
+                                        <div className="text-2xl font-bold">
+                                            {prog ? (
+                                                prog.weekMinutes
+                                            ) : (
+                                                <span className="animate-pulse text-muted-foreground">...</span>
+                                            )}
+                                        </div>
+                                        <div className="text-xs text-muted-foreground">
+                                            {t("weekMin")}
+                                        </div>
+                                    </div>
+                                </div>
 
                                 {/* Mini history chart (7-day bars) */}
-                                {prog?.series && (
-                                    <div className="mt-3 flex items-end gap-1">
-                                        {prog.series.map((d) => {
-                                            const maxMin = Math.max(
-                                                ...prog.series.map((s) => s.minutes),
-                                                10
-                                            );
-                                            const heightPct = Math.max(
-                                                (d.minutes / maxMin) * 100,
-                                                4
-                                            );
-                                            const dayLabel = new Date(d.day + "T00:00:00")
-                                                .toLocaleDateString(locale, {
-                                                    weekday: "narrow",
-                                                });
+                                <div className="mt-3 flex items-end gap-1">
+                                    {(prog?.series ??
+                                        Array.from({ length: 7 }, (_, i) => ({
+                                            day: String(i),
+                                            minutes: 0,
+                                            nodesCompleted: 0,
+                                        }))).map((d) => {
+                                        if (!prog?.series) {
                                             return (
                                                 <div
                                                     key={d.day}
                                                     className="flex flex-1 flex-col items-center"
                                                 >
                                                     <div
-                                                        className={`w-full rounded-sm transition-all ${d.minutes >= 10 ||
-                                                                d.nodesCompleted > 0
-                                                                ? "bg-primary"
-                                                                : d.minutes > 0
-                                                                    ? "bg-primary/40"
-                                                                    : "bg-muted"
-                                                            }`}
+                                                        className="w-full animate-pulse rounded-sm bg-muted"
                                                         style={{
-                                                            height: `${heightPct}%`,
+                                                            height: "22px",
                                                             minHeight: "4px",
                                                             maxHeight: "40px",
                                                         }}
-                                                        title={t("chartTooltip", {
-                                                            day: d.day,
-                                                            minutes: d.minutes,
-                                                        })}
                                                     />
                                                     <span className="mt-1 text-[10px] text-muted-foreground">
-                                                        {dayLabel}
+                                                        {" "}
                                                     </span>
                                                 </div>
                                             );
-                                        })}
-                                    </div>
-                                )}
+                                        }
+
+                                        const maxMin = Math.max(
+                                            ...prog.series.map((s) => s.minutes),
+                                            10
+                                        );
+                                        const heightPct = Math.max(
+                                            (d.minutes / maxMin) * 100,
+                                            4
+                                        );
+                                        const dayLabel = new Date(d.day + "T00:00:00").toLocaleDateString(
+                                            locale,
+                                            { weekday: "narrow" }
+                                        );
+
+                                        return (
+                                            <div
+                                                key={d.day}
+                                                className="flex flex-1 flex-col items-center"
+                                            >
+                                                <div
+                                                    className={`w-full rounded-sm transition-all ${d.minutes >= 10 || d.nodesCompleted > 0
+                                                            ? "bg-primary"
+                                                            : d.minutes > 0
+                                                                ? "bg-primary/40"
+                                                                : "bg-muted"
+                                                        }`}
+                                                    style={{
+                                                        height: `${heightPct}%`,
+                                                        minHeight: "4px",
+                                                        maxHeight: "40px",
+                                                    }}
+                                                    title={t("chartTooltip", {
+                                                        day: d.day,
+                                                        minutes: d.minutes,
+                                                    })}
+                                                />
+                                                <span className="mt-1 text-[10px] text-muted-foreground">
+                                                    {dayLabel}
+                                                </span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
 
                                 {/* Action buttons */}
                                 <div className="mt-4 flex flex-wrap gap-2">
