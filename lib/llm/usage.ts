@@ -31,6 +31,10 @@ const USAGE_ENFORCEMENT_UNAVAILABLE_REASON = "Usage enforcement unavailable.";
 const USAGE_ENFORCEMENT_MIGRATION_MISSING_REASON =
     "Usage enforcement migration not applied (0002_usage_rpc.sql).";
 
+function isUsageLimitsDisabled(): boolean {
+    return process.env.DISABLE_USAGE_LIMITS === "true";
+}
+
 interface SupabaseRpcErrorLike {
     code?: string;
     message?: string;
@@ -108,6 +112,10 @@ async function getUserPlanWithSupabase(ctx: CallLLMContext): Promise<Plan> {
  * Returns { allowed: false, reason } if limit exceeded.
  */
 export async function checkUsageLimit(userId: string): Promise<UsageCheckResult> {
+    if (isUsageLimitsDisabled()) {
+        return { allowed: true };
+    }
+
     const planSnapshot = getPlanSnapshot(await getUserPlan(userId));
     const { plan, limits } = planSnapshot;
 
@@ -152,6 +160,10 @@ export async function checkUsageLimit(userId: string): Promise<UsageCheckResult>
 export async function checkUsageLimitWithSupabase(
     ctx: CallLLMContext
 ): Promise<UsageCheckResult> {
+    if (isUsageLimitsDisabled()) {
+        return { allowed: true };
+    }
+
     try {
         const planSnapshot = getPlanSnapshot(await getUserPlanWithSupabase(ctx));
         const { plan, limits } = planSnapshot;
@@ -261,6 +273,10 @@ export async function consumeUsage(
     deltaTokens: number,
     deltaMessages = 1
 ): Promise<UsageConsumeResult> {
+    if (isUsageLimitsDisabled()) {
+        return { allowed: true };
+    }
+
     const planSnapshot = getPlanSnapshot(await getUserPlan(userId));
     const { plan, limits } = planSnapshot;
 
@@ -304,6 +320,10 @@ export async function consumeUsageWithSupabase(
     deltaTokens: number,
     deltaMessages = 1
 ): Promise<UsageConsumeResult> {
+    if (isUsageLimitsDisabled()) {
+        return { allowed: true };
+    }
+
     try {
         const planSnapshot = getPlanSnapshot(await getUserPlanWithSupabase(ctx));
         const { plan, limits } = planSnapshot;

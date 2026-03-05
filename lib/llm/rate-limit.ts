@@ -15,6 +15,10 @@ let upstashErrorLogged = false;
 let inMemoryFallbackLogged = false;
 let lastUpstashErrorReason: string | null = null;
 
+function isRateLimitDisabled(): boolean {
+    return process.env.DISABLE_RATE_LIMIT === "true";
+}
+
 function validateUpstashUrl(url: string): string | null {
     try {
         const parsed = new URL(url);
@@ -151,6 +155,10 @@ export async function checkRateLimit(
     identifier: string,
     strict = false
 ): Promise<RateLimitResult> {
+    if (isRateLimitDisabled()) {
+        return { allowed: true };
+    }
+
     const limiter = strict ? getStrictRateLimiter() : getStandardRateLimiter();
 
     if (!limiter) {
