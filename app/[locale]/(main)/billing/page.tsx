@@ -26,6 +26,7 @@ export default function BillingPage() {
 
     const [status, setStatus] = useState<BillingStatus | null>(null);
     const [loading, setLoading] = useState(true);
+    const [billingEnabled, setBillingEnabled] = useState<boolean | null>(null);
     const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -64,8 +65,26 @@ export default function BillingPage() {
         fetchStatus();
     }, [fetchStatus]);
 
+    useEffect(() => {
+        async function loadConfig() {
+            try {
+                const res = await fetch("/api/billing/config");
+                if (!res.ok) return;
+                const data = await res.json();
+                setBillingEnabled(Boolean(data?.enabled));
+            } catch {
+                // silent
+            }
+        }
+        loadConfig();
+    }, []);
+
     const handleUpgrade = async (plan: string) => {
         try {
+            if (billingEnabled === false) {
+                setError(t("comingSoon"));
+                return;
+            }
             setCheckoutLoading(plan);
             setError(null);
             const res = await fetch("/api/billing/checkout", {
@@ -74,7 +93,13 @@ export default function BillingPage() {
                 body: JSON.stringify({ plan, locale }),
             });
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error || "Checkout failed");
+            if (!res.ok) {
+                if (data?.code === "BILLING_CONFIG_ERROR") {
+                    setBillingEnabled(false);
+                    throw new Error(t("comingSoon"));
+                }
+                throw new Error(data.error || "Checkout failed");
+            }
             if (data.url) {
                 window.location.href = data.url;
             }
@@ -95,6 +120,12 @@ export default function BillingPage() {
     return (
         <div className="mx-auto max-w-4xl px-6 py-10">
             <h1 className="text-3xl font-bold">{t("title")}</h1>
+
+            {billingEnabled === false && (
+                <div className="mt-4 rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+                    {t("comingSoon")}
+                </div>
+            )}
 
             {/* Current plan badge */}
             {status && (
@@ -186,7 +217,7 @@ export default function BillingPage() {
                                 ) : (
                                     <button
                                         onClick={() => handleUpgrade(key)}
-                                        disabled={checkoutLoading !== null}
+                                        disabled={checkoutLoading !== null || billingEnabled === false}
                                         className="w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-50"
                                     >
                                         {checkoutLoading === key

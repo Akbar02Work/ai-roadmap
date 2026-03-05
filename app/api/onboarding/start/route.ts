@@ -14,6 +14,40 @@ export async function POST() {
         const { userId, supabase } = await requireAuth();
         const requestId = generateRequestId();
 
+        // If the user already has an in-progress onboarding session, reuse it.
+        // This prevents accidental creation of many duplicate goals/sessions when users revisit onboarding.
+        const { data: recentGoals, error: recentGoalsError } = await supabase
+            .from("goals")
+            .select("id")
+            .eq("user_id", userId)
+            .order("created_at", { ascending: false })
+            .limit(25);
+
+        if (recentGoalsError) {
+            console.error("[onboarding/start] recent goals query error:", recentGoalsError);
+        } else {
+            const goalIds = (recentGoals ?? []).map((g: { id: string }) => g.id);
+            if (goalIds.length > 0) {
+                const { data: existingSession, error: existingSessionError } = await supabase
+                    .from("onboarding_sessions")
+                    .select("id, goal_id, status")
+                    .in("goal_id", goalIds)
+                    .eq("status", "in_progress")
+                    .order("created_at", { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+
+                if (existingSessionError) {
+                    console.error("[onboarding/start] existing session query error:", existingSessionError);
+                } else if (existingSession?.id && existingSession.goal_id) {
+                    return NextResponse.json(
+                        { sessionId: existingSession.id, goalId: existingSession.goal_id },
+                        { status: 200 }
+                    );
+                }
+            }
+        }
+
         // 1. Create goal
         const { data: goal, error: goalError } = await supabase
             .from("goals")

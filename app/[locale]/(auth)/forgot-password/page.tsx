@@ -24,9 +24,16 @@ export default function ForgotPasswordPage() {
         const supabase = createClient();
 
         try {
+            // Use server callback to exchange code for a session cookie, then redirect back to reset page.
+            // Without this, some Supabase setups (PKCE/code flow) will never establish a session in the browser,
+            // leaving the reset-password screen stuck on "Loading...".
+            const nextPath = `/${locale}/reset-password`;
+            const redirectTo = `${window.location.origin}/api/auth/callback?next=${encodeURIComponent(
+                nextPath
+            )}&locale=${encodeURIComponent(locale)}`;
             const { error: resetError } =
                 await supabase.auth.resetPasswordForEmail(email, {
-                    redirectTo: `${window.location.origin}/${locale}/reset-password`,
+                    redirectTo,
                 });
             if (resetError) throw resetError;
             setSent(true);

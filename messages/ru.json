@@ -184,6 +184,7 @@
         "checkoutError": "Не удалось начать оплату.",
         "checkoutSuccess": "Оплата прошла успешно! Ваш план обновлён.",
         "checkoutCancelled": "Оплата отменена.",
+        "comingSoon": "Оплата будет добавлена позже.",
         "redirecting": "Перенаправляем…",
         "downgradeNA": "Обратитесь в поддержку",
         "features": {
