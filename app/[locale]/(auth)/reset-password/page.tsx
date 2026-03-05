@@ -18,26 +18,66 @@ export default function ResetPasswordPage() {
     const [success, setSuccess] = useState(false);
     const [ready, setReady] = useState(false);
 
-    // Listen for PASSWORD_RECOVERY event from Supabase
     useEffect(() => {
         const supabase = createClient();
+        let isMounted = true;
+        let unsubscribe: (() => void) | undefined;
 
-        const {
-            data: { subscription },
-        } = supabase.auth.onAuthStateChange((event) => {
-            if (event === "PASSWORD_RECOVERY") {
+        const init = async () => {
+            const hashParams = new URLSearchParams(
+                window.location.hash.replace(/^#/, "")
+            );
+            const searchParams = new URLSearchParams(window.location.search);
+
+            const accessToken =
+                hashParams.get("access_token") ??
+                searchParams.get("access_token");
+            const refreshToken =
+                hashParams.get("refresh_token") ??
+                searchParams.get("refresh_token");
+
+            if (accessToken && refreshToken) {
+                const { error: sessionError } = await supabase.auth.setSession({
+                    access_token: accessToken,
+                    refresh_token: refreshToken,
+                });
+
+                if (!sessionError && isMounted) {
+                    setReady(true);
+                    if (window.location.hash) {
+                        window.history.replaceState(
+                            null,
+                            "",
+                            `${window.location.pathname}${window.location.search}`
+                        );
+                    }
+                    return;
+                }
+            }
+
+            const {
+                data: { subscription },
+            } = supabase.auth.onAuthStateChange((event) => {
+                if (event === "PASSWORD_RECOVERY" && isMounted) {
+                    setReady(true);
+                }
+            });
+            unsubscribe = () => subscription.unsubscribe();
+
+            const {
+                data: { session },
+            } = await supabase.auth.getSession();
+            if (session && isMounted) {
                 setReady(true);
             }
-        });
+        };
 
-        // Also check if the user already has a session (recovery token in URL hash)
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            if (session) {
-                setReady(true);
-            }
-        });
+        void init();
 
-        return () => subscription.unsubscribe();
+        return () => {
+            isMounted = false;
+            unsubscribe?.();
+        };
     }, []);
 
     async function handleSubmit(e: React.FormEvent) {
